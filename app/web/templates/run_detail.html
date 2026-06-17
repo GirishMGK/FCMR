@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Run Results — FCMR{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Analytics Results</h1>
+  <a href="/" class="btn btn-ghost">← Dashboard</a>
+</div>
+
+<section class="card">
+  <h2>Run Details</h2>
+  <dl class="detail-grid">
+    <dt>Run ID</dt><dd class="mono">{{ run.run_id[:8] }}…</dd>
+    <dt>Status</dt><dd><span class="badge badge-{{ run.status }}">{{ run.status }}</span></dd>
+    <dt>Started</dt><dd>{{ run.started_at[:19].replace("T", " ") if run.started_at else "—" }} UTC</dd>
+    <dt>Finished</dt><dd>{{ run.finished_at[:19].replace("T", " ") if run.finished_at else "—" }} UTC</dd>
+    {% if run.error %}
+    <dt>Error</dt><dd class="error-text">{{ run.error }}</dd>
+    {% endif %}
+  </dl>
+</section>
+
+{% if summary %}
+<section class="card">
+  <h2>Exception Summary</h2>
+  <div class="summary-grid">
+    <div class="summary-stat">
+      <span class="stat-value">{{ "{:,}".format(summary.total) }}</span>
+      <span class="stat-label">Total Records</span>
+    </div>
+    {% for status, count in summary.status_counts.items() %}
+    <div class="summary-stat stat-{{ status.lower() }}">
+      <span class="stat-value">{{ "{:,}".format(count) }}</span>
+      <span class="stat-label">{{ status }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if summary.top_codes %}
+  <h3>Top Exception Codes</h3>
+  <table class="data-table">
+    <thead>
+      <tr><th>Exception Code</th><th>Count</th></tr>
+    </thead>
+    <tbody>
+      {% for row in summary.top_codes %}
+      <tr>
+        <td class="mono">{{ row.exception_code }}</td>
+        <td>{{ "{:,}".format(row.count) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Download Results</h2>
+  <p class="help-text">
+    <strong>Wide CSV</strong> — one row per input record with exception codes and descriptions (pipe-joined).<br/>
+    <strong>Long CSV</strong> — one row per exception, useful for filtering and pivot analysis.
+  </p>
+  <div class="download-actions">
+    <a href="/runs/{{ run.run_id }}/download/wide" class="btn btn-primary btn-dl">
+      ⬇ Download Wide CSV
+    </a>
+    <a href="/runs/{{ run.run_id }}/download/long" class="btn btn-ghost btn-dl">
+      ⬇ Download Long CSV
+    </a>
+  </div>
+</section>
+{% elif run.status == "failed" %}
+<section class="card card-error">
+  <h2>Run Failed</h2>
+  <p>{{ run.error or "An unknown error occurred." }}</p>
+</section>
+{% elif run.status in ["pending", "running"] %}
+<section class="card">
+  <p>Run is {{ run.status }}. Refresh the page to check for updates.</p>
+</section>
+{% endif %}
+{% endblock %}

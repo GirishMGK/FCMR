@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ upload.filename }} — FCMR{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>{{ upload.filename }}</h1>
+  <a href="/" class="btn btn-ghost">← Dashboard</a>
+</div>
+
+<section class="card">
+  <h2>Upload Details</h2>
+  <dl class="detail-grid">
+    <dt>Report Type</dt><dd><span class="badge badge-type">{{ upload.report_type }}</span></dd>
+    <dt>Status</dt><dd><span class="badge badge-{{ upload.status }}">{{ upload.status }}</span></dd>
+    <dt>Row Count</dt><dd>{{ "{:,}".format(upload.row_count) if upload.row_count else "—" }}</dd>
+    <dt>Uploaded</dt><dd>{{ upload.created_at[:19].replace("T", " ") }} UTC</dd>
+    <dt>Upload ID</dt><dd class="mono">{{ upload.upload_id }}</dd>
+  </dl>
+
+  {% if upload.status == "ready" %}
+  <div class="card-actions">
+    <form method="POST" action="/uploads/{{ upload.upload_id }}/run">
+      <button type="submit" class="btn btn-primary btn-run">▶ Run Analytics Now</button>
+    </form>
+  </div>
+  {% endif %}
+</section>
+
+{% if runs %}
+<section class="card">
+  <h2>Analytics Runs</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Run ID</th>
+        <th>Status</th>
+        <th>Started</th>
+        <th>Finished</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in runs %}
+      <tr>
+        <td class="mono small">{{ r.run_id[:8] }}…</td>
+        <td><span class="badge badge-{{ r.status }}">{{ r.status }}</span></td>
+        <td class="timestamp">{{ r.started_at[:19].replace("T", " ") if r.started_at else "—" }}</td>
+        <td class="timestamp">{{ r.finished_at[:19].replace("T", " ") if r.finished_at else "—" }}</td>
+        <td>
+          <a href="/runs/{{ r.run_id }}" class="btn btn-sm">Results</a>
+          {% if r.status == "completed" %}
+          <a href="/runs/{{ r.run_id }}/download/wide" class="btn btn-sm btn-dl">Wide CSV</a>
+          <a href="/runs/{{ r.run_id }}/download/long" class="btn btn-sm btn-dl">Long CSV</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<section class="card empty-state">
+  <p>No runs yet. Click <strong>Run Analytics</strong> above to start.</p>
+</section>
+{% endif %}
+{% endblock %}

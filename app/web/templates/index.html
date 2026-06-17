@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — FCMR{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Dashboard</h1>
+  <a href="/upload" class="btn btn-primary">+ New Upload</a>
+</div>
+
+{% if uploads %}
+<section class="card">
+  <h2>Recent Uploads</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>File</th>
+        <th>Report Type</th>
+        <th>Rows</th>
+        <th>Status</th>
+        <th>Uploaded</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in uploads %}
+      <tr>
+        <td class="filename">{{ u.filename }}</td>
+        <td><span class="badge badge-type">{{ u.report_type }}</span></td>
+        <td>{{ "{:,}".format(u.row_count) if u.row_count else "—" }}</td>
+        <td>
+          <span class="badge badge-{{ u.status }}">{{ u.status }}</span>
+        </td>
+        <td class="timestamp">{{ u.created_at[:19].replace("T", " ") }}</td>
+        <td>
+          <a href="/uploads/{{ u.upload_id }}" class="btn btn-sm">View</a>
+          {% if u.status == "ready" %}
+          <form method="POST" action="/uploads/{{ u.upload_id }}/run" style="display:inline">
+            <button type="submit" class="btn btn-sm btn-run">Run Analytics</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<section class="card empty-state">
+  <div class="empty-icon">📂</div>
+  <h2>No uploads yet</h2>
+  <p>Upload a customer master or other report CSV to get started.</p>
+  <a href="/upload" class="btn btn-primary">Upload your first file</a>
+</section>
+{% endif %}
+{% endblock %}
