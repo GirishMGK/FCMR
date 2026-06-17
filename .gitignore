@@ -12,11 +12,13 @@ venv/
 *.egg
 
 # Data — never commit user data or generated outputs
-data/uploads/
-data/parquet/
-data/outputs/
+data/
 *.parquet
 *.csv
+
+# Allow bundled reference data shipped with the package
+!fcmr_core/reference/*.parquet
+!fcmr_core/reference/*.csv
 
 # Env / secrets
 .env
