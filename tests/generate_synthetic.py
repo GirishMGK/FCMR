@@ -78,10 +78,11 @@ _ALPHA = string.ascii_uppercase
 def _valid_pan(name: str) -> str:
     sur = (name[0] if name else "A").upper()
     entity = random.choice(_PAN_ENTITY)
-    four = "".join(random.choices(_ALPHA, k=3))
+    three = "".join(random.choices(_ALPHA, k=3))
     seq = f"{random.randint(0, 9999):04d}"
     check = random.choice(_ALPHA)
-    return f"{four}{entity}{seq}{sur}"  # AAAAP1234A style (simplified)
+    # Format: AAAAA9999A — 3 random + entity + surname + 4 digits + check
+    return f"{three}{entity}{sur}{seq}{check}"
 
 
 def _invalid_pan() -> str:
@@ -95,7 +96,8 @@ def _valid_voter_id() -> str:
     return random.choice(_VOTER_PREFIX) + f"{random.randint(1000000, 9999999)}"
 
 
-_PASSPORT_FIRST = list("ABCDEFGHJKLMNPQRSTUVWXY")
+# Valid first chars per regex ^[A-PR-WY][0-9]{7}$ — excludes Q, X, Z
+_PASSPORT_FIRST = list("ABCDEFGHIJKLMNOPRSTUVWY")
 
 
 def _valid_passport() -> str:
@@ -177,7 +179,7 @@ def generate(n: int, output_path: Path) -> None:
 
     # Pre-select a small set of PANs to be shared (duplicate seeding)
     shared_pan_count = max(1, n // 100)
-    shared_pans = [_valid_pan("S") for _ in range(shared_pan_count)]
+    shared_pans = [_valid_pan("Shared") for _ in range(shared_pan_count)]
     shared_pan_cursor = 0
 
     fieldnames = [
