@@ -18,15 +18,20 @@ win:
   target:
     - nsis
   artifactName: SAND-Setup-${version}.${ext}
+  # Do not sign — no cert available; SmartScreen shows a one-time warning.
   signingHashAlgorithms:
     - sha256
 
 nsis:
   oneClick: false
-  allowToChangeInstallationDirectory: true
+  # Per-user install: no admin/UAC required — works on locked-down corp laptops.
+  perMachine: false
+  allowToChangeInstallationDirectory: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: SanGir Automations
+  # Bundle the Visual C++ Redistributable so machines without it work out of the box.
+  include: build/installer.nsh
 
 publish:
   provider: github

@@ -1,79 +1,119 @@
 /**
  * Electron main process for SanGir Automations.
  *
- * Spawns the FastAPI backend, waits for it to be ready, then opens a BrowserWindow.
- * Handles app lifecycle (quit, window closed, etc.).
+ * Robustness improvements over the basic version:
+ *  - Per-user data dir (no admin needed)
+ *  - Port auto-selection: tries 8765, then scans for a free port
+ *  - 90-second backend startup timeout (accommodates slow/old laptops)
+ *  - Backend stdout/stderr captured to a log file users can share
+ *  - Startup error dialog shows the log path for easy debugging
  */
 
-const { app, BrowserWindow, Menu } = require("electron");
+const { app, BrowserWindow, Menu, shell } = require("electron");
 const path = require("path");
+const fs = require("fs");
+const net = require("net");
 const { spawn } = require("child_process");
 const axios = require("axios");
 const { initUpdater } = require("./updater");
 
 let mainWindow;
 let backendProcess;
-const BACKEND_PORT = 8765;
-const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
-const MAX_RETRIES = 30; // 30 * 1 sec = 30 sec timeout
+let BACKEND_PORT = 8765;
+const MAX_RETRIES = 90; // 90 × 1 s = 90 s — gives slow laptops more headroom
 
-/**
- * Spawn the FastAPI backend process.
- */
-function spawnBackend() {
-  console.log("[Electron] Spawning backend...");
+// Log file in the user's AppData so users can find and share it easily.
+const LOG_DIR = path.join(app.getPath("userData"), "logs");
+const BACKEND_LOG = path.join(LOG_DIR, "backend.log");
 
-  // In production (packaged), run the frozen .exe from resources
-  // In development, run via Python
+function ensureLogDir() {
+  try { fs.mkdirSync(LOG_DIR, { recursive: true }); } catch (_) {}
+}
+
+function writeLog(line) {
+  try {
+    fs.appendFileSync(BACKEND_LOG, `[${new Date().toISOString()}] ${line}\n`);
+  } catch (_) {}
+}
+
+/** Find a free TCP port starting from `start`. */
+function findFreePort(start) {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.on("error", () => {
+      // Port busy — try next one
+      findFreePort(start + 1).then(resolve).catch(reject);
+    });
+    server.listen(start, "127.0.0.1", () => {
+      server.close(() => resolve(start));
+    });
+  });
+}
+
+async function spawnBackend() {
+  ensureLogDir();
+  writeLog("=== SanGir Automations starting ===");
+
+  // Find a free port (prefer 8765, fall back automatically)
+  BACKEND_PORT = await findFreePort(8765);
+  writeLog(`Using port ${BACKEND_PORT}`);
+
   const isDev = !app.isPackaged;
   const backendExe = isDev
     ? "python"
     : path.join(process.resourcesPath, "sangir-backend", "sangir-backend.exe");
 
-  // desktop_backend.py lives at the repo root (one level up from electron/)
   const repoRoot = path.join(__dirname, "..");
-  const args = isDev ? ["desktop_backend.py"] : [];
+  const args = isDev ? [path.join(repoRoot, "desktop_backend.py")] : [];
   const env = { ...process.env, FCMR_BACKEND_PORT: String(BACKEND_PORT) };
+
+  writeLog(`Spawning backend: ${backendExe} ${args.join(" ")}`);
 
   backendProcess = spawn(backendExe, args, {
     env,
-    stdio: "inherit", // Show backend logs in console
+    stdio: ["ignore", "pipe", "pipe"],
     cwd: isDev ? repoRoot : undefined,
   });
 
+  // Capture backend output to log file
+  backendProcess.stdout.on("data", (data) => {
+    const lines = data.toString().trim().split("\n");
+    lines.forEach((l) => writeLog(`[backend] ${l}`));
+  });
+  backendProcess.stderr.on("data", (data) => {
+    const lines = data.toString().trim().split("\n");
+    lines.forEach((l) => writeLog(`[backend:err] ${l}`));
+  });
+
   backendProcess.on("error", (err) => {
-    console.error("[Electron] Backend spawn error:", err);
+    writeLog(`Backend spawn error: ${err.message}`);
   });
 
   backendProcess.on("exit", (code, signal) => {
-    console.log(`[Electron] Backend exited (code: ${code}, signal: ${signal})`);
+    writeLog(`Backend exited (code=${code}, signal=${signal})`);
   });
 }
 
-/**
- * Wait for the backend to be ready (health check).
- */
 async function waitForBackend(retries = MAX_RETRIES) {
+  const url = `http://127.0.0.1:${BACKEND_PORT}`;
   for (let i = 0; i < retries; i++) {
     try {
-      const response = await axios.get(BACKEND_URL, { timeout: 1000 });
-      if (response.status === 200) {
-        console.log("[Electron] Backend is ready");
+      const res = await axios.get(url, { timeout: 2000 });
+      if (res.status === 200) {
+        writeLog("Backend is ready");
         return true;
       }
-    } catch (err) {
-      console.log(`[Electron] Backend not ready (attempt ${i + 1}/${retries})`);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+    } catch (_) {
+      writeLog(`Waiting for backend (${i + 1}/${retries})…`);
+      await new Promise((r) => setTimeout(r, 1000));
     }
   }
   throw new Error(
-    `Backend did not respond after ${retries} seconds. Check logs.`
+    `Backend did not respond after ${retries} seconds.\n\nLog file: ${BACKEND_LOG}`
   );
 }
 
-/**
- * Create the BrowserWindow and load the backend URL.
- */
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -85,34 +125,28 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
     },
-    icon: path.join(__dirname, "..", "build", "icon.png"), // Add icon later
+    // icon is optional — missing file is silently ignored
+    ...(fs.existsSync(path.join(__dirname, "..", "build", "icon.png"))
+      ? { icon: path.join(__dirname, "..", "build", "icon.png") }
+      : {}),
   });
 
-  mainWindow.loadURL(BACKEND_URL);
+  mainWindow.loadURL(`http://127.0.0.1:${BACKEND_PORT}`);
 
-  // Open DevTools in development
   if (!app.isPackaged) {
     mainWindow.webContents.openDevTools();
   }
 
-  mainWindow.on("closed", () => {
-    mainWindow = null;
-  });
+  mainWindow.on("closed", () => { mainWindow = null; });
 }
 
-/**
- * App event handlers.
- */
 app.on("ready", async () => {
   try {
-    spawnBackend();
+    await spawnBackend();
     await waitForBackend();
     createWindow();
-
-    // Initialize auto-updater
     initUpdater();
 
-    // Create a simple app menu
     const template = [
       {
         label: "File",
@@ -132,43 +166,41 @@ app.on("ready", async () => {
                 title: "About SanGir Automations",
                 message: `SanGir Automations v${app.getVersion()}`,
                 detail:
-                  "Deterministic audit analytics for NBFC loan portfolios.\nLocal processing, zero cloud uploads.",
+                  "Deterministic audit analytics for NBFC loan portfolios.\nLocal processing — zero cloud uploads.",
               });
             },
+          },
+          {
+            label: "Open Log File",
+            click: () => { shell.openPath(BACKEND_LOG); },
           },
         ],
       },
     ];
 
-    const menu = Menu.buildFromTemplate(template);
-    Menu.setApplicationMenu(menu);
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
   } catch (err) {
-    console.error("[Electron] Startup failed:", err);
+    writeLog(`Startup failed: ${err.message}`);
     const { dialog } = require("electron");
     dialog.showErrorBox(
       "Startup Error",
-      `Failed to start SanGir Automations:\n${err.message}`
+      `Failed to start SanGir Automations:\n${err.message}\n\nShare the log file with support:\n${BACKEND_LOG}`
     );
     app.quit();
   }
 });
 
 app.on("window-all-closed", () => {
-  // On macOS, apps typically stay active until the user quits explicitly
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
+  if (process.platform !== "darwin") app.quit();
 });
 
 app.on("before-quit", () => {
-  // Kill the backend process on app quit
   if (backendProcess) {
-    console.log("[Electron] Terminating backend...");
+    writeLog("Terminating backend…");
     backendProcess.kill();
   }
 });
 
-// Prevent multiple app instances
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
