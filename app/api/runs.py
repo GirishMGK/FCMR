@@ -88,17 +88,19 @@ def _run_analytics(run_id: str, upload_id: str) -> None:
         upload = store.get_upload(upload_id)
         logger.info("job_start run_id=%s upload_id=%s", run_id, upload_id)
 
-        # Verify the parquet file exists before starting
-        parquet_path = Path(upload["parquet_path"])
-        if not parquet_path.exists():
-            raise FileNotFoundError(
-                f"Data file not found at {parquet_path}. "
-                "The upload may be from a different machine or session. "
-                "Please re-upload the CSV file."
-            )
-
         if _step("Loading data file"): return
-        df = read_parquet(parquet_path).collect()
+        # Data is stored in DuckDB after ingestion (parquet is deleted post-import).
+        # Fall back to reading from parquet path only if the DuckDB table is missing.
+        try:
+            df = store.get_upload_df(upload_id)
+        except Exception:
+            parquet_path = Path(upload["parquet_path"])
+            if not parquet_path.exists():
+                raise FileNotFoundError(
+                    f"Data file not found at {parquet_path}. "
+                    "Please re-upload the CSV file."
+                )
+            df = read_parquet(parquet_path).collect()
         logger.info("job_loaded run_id=%s rows=%d", run_id, len(df))
 
         if _step("Running 27 validation rules"): return
