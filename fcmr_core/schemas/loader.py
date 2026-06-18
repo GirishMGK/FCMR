@@ -72,8 +72,8 @@ class SchemaMap:
                 if score > best_score:
                     best_score = score
                     best_match = col.canonical
-            # Only include if score is reasonable (>= 0.7)
-            if best_match and best_score >= 0.7:
+            # Only include if score is reasonable (>= 0.6)
+            if best_match and best_score >= 0.6:
                 result[h] = (best_match, round(best_score, 2))
         return result
 
