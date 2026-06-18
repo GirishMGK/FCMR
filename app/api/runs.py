@@ -89,10 +89,12 @@ async def run_detail(request: Request, run_id: str):
             bar_svg = build_bar_chart(exception_codes, width=700, height=400)
 
             total = sum(status_counts.values())
+            top_codes = [{"exception_code": c, "count": n} for c, n in exception_codes.items()]
             summary = {
                 "total": total,
                 "status_counts": status_counts,
                 "exception_codes": exception_codes,
+                "top_codes": top_codes,
             }
 
     return templates.TemplateResponse(
@@ -105,23 +107,6 @@ async def run_detail(request: Request, run_id: str):
         },
     )
 
-
-def _top_exception_codes(long_csv_path: str | None, n: int = 10):
-    if not long_csv_path:
-        return []
-    p = Path(long_csv_path)
-    if not p.exists():
-        return []
-    df = pl.read_csv(str(p))
-    if df.is_empty() or "exception_code" not in df.columns:
-        return []
-    return (
-        df["exception_code"]
-        .value_counts()
-        .sort("count", descending=True)
-        .head(n)
-        .iter_rows(named=True)
-    )
 
 
 @router.get("/runs/{run_id}/export/svg")

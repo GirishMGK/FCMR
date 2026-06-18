@@ -319,14 +319,22 @@ def save_mapping_profile(
     engagement_id: str | None = None,
     created_by: str = "admin",
 ) -> str:
-    """Save a column mapping profile. Returns profile_id."""
+    """Save a column mapping profile. Returns profile_id. Updates existing profile if signature already saved."""
     profile_id = str(uuid.uuid4())
     with _conn() as con:
-        con.execute(
-            "INSERT INTO mapping_profiles (profile_id, report_type, header_signature, mapping_json, engagement_id, created_by, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [profile_id, report_type, header_signature, mapping_json, engagement_id, created_by, _now()],
-        )
+        try:
+            con.execute(
+                "INSERT INTO mapping_profiles (profile_id, report_type, header_signature, mapping_json, engagement_id, created_by, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [profile_id, report_type, header_signature, mapping_json, engagement_id, created_by, _now()],
+            )
+        except Exception:
+            # Duplicate signature — update the mapping_json in place
+            con.execute(
+                "UPDATE mapping_profiles SET mapping_json=?, created_at=? "
+                "WHERE report_type=? AND header_signature=? AND engagement_id IS ?",
+                [mapping_json, _now(), report_type, header_signature, engagement_id],
+            )
     return profile_id
 
 

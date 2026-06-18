@@ -9,7 +9,7 @@
 {% endblock %}
 
 {% block topbar_actions %}
-  <a href="/" class="btn btn-ghost" style="margin-left:auto;">← Dashboard</a>
+  <a href="/dashboard" class="btn btn-ghost" style="margin-left:auto;">← Dashboard</a>
 {% endblock %}
 
 {% block content %}
@@ -118,10 +118,10 @@
     </thead>
     <tbody>
       {% set max_count = summary.top_codes[0]["count"] if summary.top_codes else 1 %}
-      {% for row in summary.top_codes %}
-      {% set pct = (row["count"] / summary.total * 100) if summary.total > 0 else 0 %}
-      {% set bar_pct = (row["count"] / max_count * 100) | round(0) | int %}
-      {% set code = row["exception_code"] %}
+      {% for item in summary.top_codes %}
+      {% set pct = (item["count"] / summary.total * 100) if summary.total > 0 else 0 %}
+      {% set bar_pct = (item["count"] / max_count * 100) | round(0) | int %}
+      {% set code = item["exception_code"] %}
       {% if "KYC" in code or "PAN" in code or "AADHAAR" in code or "DL" in code or "VOTER" in code or "PASSPORT" in code or "DOB" in code or "EMAIL" in code or "MOBILE" in code %}
         {% set cat = "KYC Format" %}
         {% set cat_class = "badge-cat-kyc" %}
@@ -142,7 +142,7 @@
       <tr>
         <td class="mono">{{ code }}</td>
         <td><span class="badge {{ cat_class }}">{{ cat }}</span></td>
-        <td class="mono right">{{ "{:,}".format(row["count"]) }}</td>
+        <td class="mono right">{{ "{:,}".format(item["count"]) }}</td>
         <td>
           <div class="exc-bar-wrap">
             <div class="exc-bar-track">
@@ -205,7 +205,7 @@
   <div class="card-title">Run Failed</div>
   <p style="margin-top:8px; font-size:13.5px;">{{ run.error or "An unknown error occurred." }}</p>
   <div class="card-actions">
-    <a href="/" class="btn btn-ghost">← Back to Dashboard</a>
+    <a href="/dashboard" class="btn btn-ghost">← Back to Dashboard</a>
   </div>
 </div>
 
