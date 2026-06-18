@@ -33,3 +33,4 @@ publish:
   owner: ihbsandeepreddy
   repo: sangir-releases
   protocol: https
+  releaseType: release
