@@ -44,3 +44,192 @@ async def start_run(upload_id: str, background_tasks: BackgroundTasks):
 
     return RedirectResponse(url=f"/runs/{run_id}", status_code=303)
 
+
+def _run_analytics(run_id: str, upload_id: str) -> None:
+    """Execute the full analytics pipeline and update the catalog when done."""
+    try:
+        upload = store.get_upload(upload_id)
+        logger.info("job_start run_id=%s upload_id=%s", run_id, upload_id)
+
+        parquet_path = Path(upload["parquet_path"])
+        df = read_parquet(parquet_path).collect()
+        logger.info("job_loaded run_id=%s rows=%d", run_id, len(df))
+
+        annotated = run_pipeline(df)
+        out_dir = settings.outputs_dir / run_id
+        wide_path, long_path = build_exception_csvs(annotated, run_id, out_dir)
+
+        logger.info("job_complete run_id=%s wide=%s long=%s", run_id, wide_path.name, long_path.name)
+        store.update_run(
+            run_id,
+            status="completed",
+            finished_at=_now(),
+            wide_csv=str(wide_path),
+            long_csv=str(long_path),
+        )
+    except Exception as exc:
+        logger.error("job_failed run_id=%s error=%s", run_id, type(exc).__name__)
+        store.update_run(run_id, status="failed", finished_at=_now(), error=str(exc))
+
+
+@router.get("/runs/{run_id}", response_class=HTMLResponse)
+async def run_detail(request: Request, run_id: str):
+    run = store.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    donut_svg = None
+    bar_svg = None
+    summary = None
+
+    if run["status"] == "completed" and run["wide_csv"]:
+        wide_path = Path(run["wide_csv"])
+        if wide_path.exists():
+            status_counts = aggregate_status_counts(wide_path)
+            exception_codes = aggregate_exception_codes(wide_path, top_n=10)
+
+            donut_svg = build_donut_svg(status_counts, width=300, height=300)
+            bar_svg = build_bar_chart(exception_codes, width=700, height=400)
+
+            total = sum(status_counts.values())
+            top_codes = [{"exception_code": c, "count": n} for c, n in exception_codes.items()]
+            summary = {
+                "total": total,
+                "status_counts": status_counts,
+                "exception_codes": exception_codes,
+                "top_codes": top_codes,
+            }
+
+    return templates.TemplateResponse(
+        request=request, name="run_detail.html",
+        context={
+            "run": run,
+            "summary": summary,
+            "donut_svg": donut_svg,
+            "bar_svg": bar_svg,
+        },
+    )
+
+
+@router.get("/runs/{run_id}/export/svg")
+async def export_charts_svg(run_id: str):
+    """Export donut + bar charts as a single SVG."""
+    run = store.get_run(run_id)
+    if not run or run["status"] != "completed" or not run["wide_csv"]:
+        raise HTTPException(status_code=404, detail="Run not found or not completed")
+
+    wide_path = Path(run["wide_csv"])
+    if not wide_path.exists():
+        raise HTTPException(status_code=404, detail="Wide CSV not found")
+
+    status_counts = aggregate_status_counts(wide_path)
+    exception_codes = aggregate_exception_codes(wide_path, top_n=10)
+
+    donut_svg = build_donut_svg(status_counts, width=300, height=300)
+    bar_svg = build_bar_chart(exception_codes, width=700, height=400)
+
+    combined_svg = f"""<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1000 900" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .title {{ font-size: 18px; font-weight: bold; fill: #1f2937; }}
+  </style>
+  <text x="20" y="30" class="title">Analytics Summary</text>
+
+  <!-- Donut chart -->
+  <g transform="translate(20, 60)">
+    {donut_svg}
+  </g>
+
+  <!-- Bar chart -->
+  <g transform="translate(20, 450)">
+    {bar_svg}
+  </g>
+</svg>"""
+
+    return combined_svg
+
+
+@router.get("/runs/{run_id}/charts/donut.svg")
+async def get_donut_chart(run_id: str):
+    """Get donut chart SVG for embedding."""
+    run = store.get_run(run_id)
+    if not run or run["status"] != "completed" or not run["wide_csv"]:
+        raise HTTPException(status_code=404, detail="Run not found or not completed")
+
+    wide_path = Path(run["wide_csv"])
+    if not wide_path.exists():
+        raise HTTPException(status_code=404, detail="Wide CSV not found")
+
+    status_counts = aggregate_status_counts(wide_path)
+    donut_svg = build_donut_svg(status_counts, width=300, height=300)
+
+    return {"donut_svg": donut_svg}
+
+
+@router.get("/runs/{run_id}/charts/bar.svg")
+async def get_bar_chart(run_id: str):
+    """Get bar chart SVG for embedding."""
+    run = store.get_run(run_id)
+    if not run or run["status"] != "completed" or not run["wide_csv"]:
+        raise HTTPException(status_code=404, detail="Run not found or not completed")
+
+    wide_path = Path(run["wide_csv"])
+    if not wide_path.exists():
+        raise HTTPException(status_code=404, detail="Wide CSV not found")
+
+    exception_codes = aggregate_exception_codes(wide_path, top_n=10)
+    bar_svg = build_bar_chart(exception_codes, width=700, height=400)
+
+    return {"bar_svg": bar_svg}
+
+
+@router.get("/runs/{run_id}/export/workpaper")
+async def export_workpaper(run_id: str):
+    """Generate and download workpaper Excel."""
+    run = store.get_run(run_id)
+    if not run or run["status"] != "completed" or not run["wide_csv"] or not run["long_csv"]:
+        raise HTTPException(status_code=404, detail="Run not found or not completed")
+
+    engagement = store.get_engagement(run["engagement_id"])
+    if not engagement:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+
+    wide_path = Path(run["wide_csv"])
+    long_path = Path(run["long_csv"])
+    if not wide_path.exists() or not long_path.exists():
+        raise HTTPException(status_code=404, detail="CSV files not found")
+
+    try:
+        df = pl.read_csv(wide_path)
+        population = len(df)
+        exception_count = sum(1 for val in df["overall_status"] if val != "OK")
+
+        sample_records = select_sample(
+            wide_path,
+            engagement_id=run["engagement_id"],
+            run_id=run_id,
+            population=population,
+            exception_count=exception_count,
+        )
+
+        workpaper_path = build_workpaper(
+            engagement=engagement,
+            run=run,
+            wide_csv_path=wide_path,
+            sample_records=sample_records,
+            output_dir=settings.outputs_dir / run_id,
+        )
+
+        store.update_run(run_id, workpaper_path=str(workpaper_path))
+
+        return FileResponse(
+            workpaper_path,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename=workpaper_path.name,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Workpaper generation failed: {exc}") from exc
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
