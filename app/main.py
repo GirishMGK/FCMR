@@ -12,7 +12,7 @@ from starlette.responses import RedirectResponse, Response
 from fcmr_core.catalog import store
 from fcmr_core.catalog.store import init_catalog
 from fcmr_core.config import settings
-from app.api import auth, downloads, engagements, runs, settings, uploads
+from app.api import auth, downloads, engagements, runs, settings as settings_api, uploads
 
 
 @asynccontextmanager
@@ -68,4 +68,4 @@ app.include_router(runs.router, prefix="", tags=["runs"])
 app.include_router(downloads.router, prefix="", tags=["downloads"])
 
 # Settings routes — require login
-app.include_router(settings.router, prefix="", tags=["settings"])
+app.include_router(settings_api.router, prefix="", tags=["settings"])
