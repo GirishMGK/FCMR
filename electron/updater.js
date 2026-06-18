@@ -1,76 +1,62 @@
 /**
  * Auto-updater for SanGir Automations desktop app.
  *
- * Uses electron-updater to check for new releases on the public GitHub releases repo
- * (ihbsandeepreddy/sangir-releases) and installs them on restart.
+ * Silent update strategy (Claude-style):
+ *   1. Check for updates on startup and every 4 hours.
+ *   2. Download silently in the background — no dialogs, no prompts.
+ *   3. Install automatically the next time the user quits the app.
+ *
+ * The user never sees a dialog. They just open the app after closing it
+ * and it is already on the new version.
  */
 
 const { autoUpdater } = require("electron-updater");
 
-const updateLogger = {
-  log: (...args) => console.log("[updater]", ...args),
+const log = {
+  info: (...args) => console.log("[updater]", ...args),
   error: (...args) => console.error("[updater]", ...args),
 };
 
-/**
- * Initialize the auto-updater.
- */
 function initUpdater() {
-  // Configure update source
-  autoUpdater.owner = "ihbsandeepreddy";
-  autoUpdater.repo = "sangir-releases";
-  autoUpdater.channel = "latest";
+  // Install silently on next quit — no explicit quitAndInstall call needed.
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoDownload = true;
 
-  // Log events
   autoUpdater.on("checking-for-update", () => {
-    updateLogger.log("Checking for updates...");
+    log.info("Checking for updates...");
   });
 
   autoUpdater.on("update-available", (info) => {
-    updateLogger.log(`Update available: ${info.version}`);
+    log.info(`Update available: ${info.version} — downloading silently`);
   });
 
   autoUpdater.on("update-not-available", () => {
-    updateLogger.log("App is up to date");
+    log.info("App is up to date");
   });
 
   autoUpdater.on("error", (err) => {
-    updateLogger.error(`Update error: ${err}`);
+    // Non-fatal — log and continue. Offline users should not see a crash.
+    log.error(`Update check failed: ${err.message}`);
   });
 
   autoUpdater.on("download-progress", (progress) => {
-    updateLogger.log(
-      `Downloading update: ${Math.round(progress.percent)}% (${progress.transferred}/${progress.total} bytes)`
-    );
+    log.info(`Downloading: ${Math.round(progress.percent)}%`);
   });
 
   autoUpdater.on("update-downloaded", (info) => {
-    updateLogger.log(
-      `Update downloaded: ${info.version}. Install on next restart.`
-    );
-
-    // Prompt user to restart and install
-    const { dialog, app } = require("electron");
-    dialog
-      .showMessageBox({
-        type: "info",
-        title: "Update Available",
-        message: `Version ${info.version} is ready to install.`,
-        detail: "The app will update on the next restart.",
-        buttons: ["Restart Now", "Later"],
-      })
-      .then(({ response }) => {
-        if (response === 0) {
-          autoUpdater.quitAndInstall();
-        }
-      });
+    log.info(`v${info.version} downloaded — will install on next quit`);
   });
 
-  // Check for updates every 12 hours, or on startup
-  autoUpdater.checkForUpdatesAndNotify();
+  // Check on startup, then every 4 hours.
+  autoUpdater.checkForUpdates().catch((err) => {
+    log.error(`Initial update check failed: ${err.message}`);
+  });
+
   setInterval(() => {
-    autoUpdater.checkForUpdatesAndNotify();
-  }, 12 * 60 * 60 * 1000);
+    autoUpdater.checkForUpdates().catch((err) => {
+      log.error(`Periodic update check failed: ${err.message}`);
+    });
+  }, 4 * 60 * 60 * 1000);
 }
 
 module.exports = { initUpdater };
