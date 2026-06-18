@@ -18,6 +18,30 @@ def _conn() -> duckdb.DuckDBPyConnection:
 
 def init_catalog() -> None:
     with _conn() as con:
+        # Users table
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                username      TEXT PRIMARY KEY,
+                password_hash TEXT NOT NULL,
+                display_name  TEXT NOT NULL,
+                created_at    TEXT NOT NULL
+            )
+        """)
+
+        # Engagements table
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS engagements (
+                engagement_id TEXT PRIMARY KEY,
+                name          TEXT NOT NULL,
+                client_name   TEXT,
+                period_from   TEXT,
+                period_to     TEXT,
+                status        TEXT NOT NULL DEFAULT 'active',
+                created_by    TEXT NOT NULL REFERENCES users(username),
+                created_at    TEXT NOT NULL
+            )
+        """)
+
         con.execute("""
             CREATE TABLE IF NOT EXISTS uploads (
                 upload_id       TEXT PRIMARY KEY,
@@ -29,6 +53,7 @@ def init_catalog() -> None:
                 row_count       INTEGER,
                 parquet_path    TEXT,
                 status          TEXT NOT NULL DEFAULT 'mapping_pending',
+                engagement_id   TEXT REFERENCES engagements(engagement_id),
                 created_at      TEXT NOT NULL
             )
         """)
@@ -37,6 +62,7 @@ def init_catalog() -> None:
             ("csv_path", "TEXT"),
             ("sniffed_headers", "TEXT"),
             ("column_mapping", "TEXT"),
+            ("engagement_id", "TEXT"),
         ]:
             try:
                 con.execute(f"ALTER TABLE uploads ADD COLUMN {col} {dtype}")
@@ -45,16 +71,35 @@ def init_catalog() -> None:
 
         con.execute("""
             CREATE TABLE IF NOT EXISTS runs (
-                run_id       TEXT PRIMARY KEY,
-                upload_id    TEXT NOT NULL REFERENCES uploads(upload_id),
-                status       TEXT NOT NULL DEFAULT 'pending',
-                started_at   TEXT,
-                finished_at  TEXT,
-                wide_csv     TEXT,
-                long_csv     TEXT,
-                error        TEXT
+                run_id        TEXT PRIMARY KEY,
+                upload_id     TEXT NOT NULL REFERENCES uploads(upload_id),
+                engagement_id TEXT REFERENCES engagements(engagement_id),
+                status        TEXT NOT NULL DEFAULT 'pending',
+                started_at    TEXT,
+                finished_at   TEXT,
+                wide_csv      TEXT,
+                long_csv      TEXT,
+                error         TEXT
             )
         """)
+        # Migrate runs table to add engagement_id
+        try:
+            con.execute("ALTER TABLE runs ADD COLUMN engagement_id TEXT")
+        except Exception:
+            pass  # Column already exists
+
+        # Create a default engagement for existing uploads
+        try:
+            con.execute("""
+                INSERT INTO engagements (engagement_id, name, client_name, status, created_by, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, ["default", "Default Engagement", "Default", "active", "admin", _now()])
+        except Exception:
+            pass  # Default engagement already exists
+
+        # Backfill engagement_id for existing uploads
+        con.execute("UPDATE uploads SET engagement_id = 'default' WHERE engagement_id IS NULL")
+        con.execute("UPDATE runs SET engagement_id = 'default' WHERE engagement_id IS NULL")
 
 
 # ---------------------------------------------------------------------------
@@ -117,13 +162,6 @@ def get_upload(upload_id: str) -> dict | None:
     return dict(zip(cols, rows[0]))
 
 
-def list_uploads() -> list[dict]:
-    with _conn() as con:
-        rows = con.execute("SELECT * FROM uploads ORDER BY created_at DESC").fetchall()
-        cols = [d[0] for d in con.description]
-    return [dict(zip(cols, r)) for r in rows]
-
-
 # ---------------------------------------------------------------------------
 # Run CRUD
 # ---------------------------------------------------------------------------
@@ -148,11 +186,17 @@ def update_run(run_id: str, **kwargs: str | None) -> None:
         con.execute(f"UPDATE runs SET {sets} WHERE run_id=?", [*fields.values(), run_id])
 
 
-def list_runs(upload_id: str) -> list[dict]:
+def list_runs(upload_id: str, engagement_id: str | None = None) -> list[dict]:
     with _conn() as con:
-        rows = con.execute(
-            "SELECT * FROM runs WHERE upload_id=? ORDER BY run_id DESC", [upload_id]
-        ).fetchall()
+        if engagement_id:
+            rows = con.execute(
+                "SELECT * FROM runs WHERE upload_id=? AND engagement_id=? ORDER BY run_id DESC",
+                [upload_id, engagement_id],
+            ).fetchall()
+        else:
+            rows = con.execute(
+                "SELECT * FROM runs WHERE upload_id=? ORDER BY run_id DESC", [upload_id]
+            ).fetchall()
         cols = [d[0] for d in con.description]
     return [dict(zip(cols, r)) for r in rows]
 
@@ -164,6 +208,77 @@ def get_run(run_id: str) -> dict | None:
             return None
         cols = [d[0] for d in con.description]
     return dict(zip(cols, rows[0]))
+
+
+# ---------------------------------------------------------------------------
+# User CRUD
+# ---------------------------------------------------------------------------
+
+def create_user(username: str, password_hash: str, display_name: str) -> None:
+    with _conn() as con:
+        con.execute(
+            "INSERT INTO users (username, password_hash, display_name, created_at) VALUES (?, ?, ?, ?)",
+            [username, password_hash, display_name, _now()],
+        )
+
+
+def get_user(username: str) -> dict | None:
+    with _conn() as con:
+        rows = con.execute("SELECT * FROM users WHERE username=?", [username]).fetchall()
+        if not rows:
+            return None
+        cols = [d[0] for d in con.description]
+    return dict(zip(cols, rows[0]))
+
+
+# ---------------------------------------------------------------------------
+# Engagement CRUD
+# ---------------------------------------------------------------------------
+
+def create_engagement(
+    name: str,
+    client_name: str | None = None,
+    period_from: str | None = None,
+    period_to: str | None = None,
+    created_by: str = "admin",
+) -> str:
+    eid = str(uuid.uuid4())
+    with _conn() as con:
+        con.execute(
+            "INSERT INTO engagements (engagement_id, name, client_name, period_from, period_to, status, created_by, created_at) "
+            "VALUES (?, ?, ?, ?, ?, 'active', ?, ?)",
+            [eid, name, client_name, period_from, period_to, created_by, _now()],
+        )
+    return eid
+
+
+def get_engagement(engagement_id: str) -> dict | None:
+    with _conn() as con:
+        rows = con.execute("SELECT * FROM engagements WHERE engagement_id=?", [engagement_id]).fetchall()
+        if not rows:
+            return None
+        cols = [d[0] for d in con.description]
+    return dict(zip(cols, rows[0]))
+
+
+def list_engagements() -> list[dict]:
+    with _conn() as con:
+        rows = con.execute("SELECT * FROM engagements ORDER BY created_at DESC").fetchall()
+        cols = [d[0] for d in con.description]
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def list_uploads(engagement_id: str | None = None) -> list[dict]:
+    with _conn() as con:
+        if engagement_id:
+            rows = con.execute(
+                "SELECT * FROM uploads WHERE engagement_id=? ORDER BY created_at DESC",
+                [engagement_id],
+            ).fetchall()
+        else:
+            rows = con.execute("SELECT * FROM uploads ORDER BY created_at DESC").fetchall()
+        cols = [d[0] for d in con.description]
+    return [dict(zip(cols, r)) for r in rows]
 
 
 def _now() -> str:

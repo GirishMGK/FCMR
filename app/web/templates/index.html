@@ -1,55 +1,96 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — FCMR{% endblock %}
+{% block title %}Dashboard — SanGir Automations{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block topbar_actions %}
+  <a href="/dashboard/upload" class="btn btn-primary" style="margin-left:auto;">
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+      <rect x="1" y="1" width="14" height="14" rx="3" stroke="white" stroke-width="1.6" fill="none"/>
+      <path d="M8 11V5M5.5 7.5L8 5L10.5 7.5" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    New Upload
+  </a>
+{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <h1>Dashboard</h1>
-  <a href="/upload" class="btn btn-primary">+ New Upload</a>
+
+{# ── Stat cards ── #}
+{% set total = uploads | length %}
+{% set ready = uploads | selectattr("status", "equalto", "ready") | list | length %}
+{% set pending = uploads | selectattr("status", "equalto", "mapping_pending") | list | length %}
+{% set failed = uploads | selectattr("status", "equalto", "failed") | list | length %}
+
+<div class="stat-row">
+  <div class="stat-card">
+    <div class="stat-label">Total Uploads</div>
+    <div class="stat-value">{{ total }}</div>
+    <div class="stat-meta">all time</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Ready to Run</div>
+    <div class="stat-value">{{ ready }}</div>
+    <div class="stat-meta">analytics available</div>
+  </div>
+  <div class="stat-card stat-ok">
+    <div class="stat-label">Mapping Pending</div>
+    <div class="stat-value">{{ pending }}</div>
+    <div class="stat-meta">awaiting column map</div>
+  </div>
+  <div class="stat-card stat-warn">
+    <div class="stat-label">Failed</div>
+    <div class="stat-value">{{ failed }}</div>
+    <div class="stat-meta">ingestion errors</div>
+  </div>
 </div>
 
+{# ── Uploads table ── #}
 {% if uploads %}
-<section class="card">
-  <h2>Recent Uploads</h2>
+<div class="card" style="padding:0; overflow:hidden;">
+  <div style="padding:16px 20px 14px; border-bottom:1px solid var(--border);">
+    <div class="card-title">Recent Uploads</div>
+  </div>
   <table class="data-table">
     <thead>
       <tr>
         <th>File</th>
         <th>Report Type</th>
-        <th>Rows</th>
+        <th style="text-align:right">Rows</th>
         <th>Status</th>
         <th>Uploaded</th>
-        <th>Actions</th>
+        <th></th>
       </tr>
     </thead>
     <tbody>
       {% for u in uploads %}
       <tr>
         <td class="filename">{{ u.filename }}</td>
-        <td><span class="badge badge-type">{{ u.report_type }}</span></td>
-        <td>{{ "{:,}".format(u.row_count) if u.row_count else "—" }}</td>
-        <td>
-          <span class="badge badge-{{ u.status }}">{{ u.status }}</span>
-        </td>
-        <td class="timestamp">{{ u.created_at[:19].replace("T", " ") }}</td>
-        <td>
-          <a href="/uploads/{{ u.upload_id }}" class="btn btn-sm">View</a>
+        <td><span class="badge badge-type">{{ u.report_type.replace("_"," ").title() }}</span></td>
+        <td class="mono right">{{ "{:,}".format(u.row_count) if u.row_count else "—" }}</td>
+        <td><span class="badge badge-{{ u.status }}">{{ u.status.replace("_"," ") }}</span></td>
+        <td class="timestamp">{{ u.created_at[:16].replace("T"," ") }}</td>
+        <td style="text-align:right; white-space:nowrap;">
+          <a href="/uploads/{{ u.upload_id }}" class="btn btn-sm btn-ghost">View</a>
           {% if u.status == "ready" %}
           <form method="POST" action="/uploads/{{ u.upload_id }}/run" style="display:inline">
-            <button type="submit" class="btn btn-sm btn-run">Run Analytics</button>
+            <button type="submit" class="btn btn-sm btn-run" style="margin-left:4px;">▶ Run</button>
           </form>
+          {% elif u.status == "mapping_pending" %}
+          <a href="/uploads/{{ u.upload_id }}/map-columns" class="btn btn-sm btn-primary" style="margin-left:4px;">Map →</a>
           {% endif %}
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
-</section>
+</div>
+
 {% else %}
-<section class="card empty-state">
+<div class="card empty-state">
   <div class="empty-icon">📂</div>
   <h2>No uploads yet</h2>
   <p>Upload a customer master or other report CSV to get started.</p>
   <a href="/upload" class="btn btn-primary">Upload your first file</a>
-</section>
+</div>
 {% endif %}
+
 {% endblock %}

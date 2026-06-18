@@ -43,24 +43,28 @@ def _hash_aadhaar(raw: str) -> str:
 
 
 def _find_duplicates_duckdb(df: pl.DataFrame, key_col: str, id_col: str) -> dict[str, list[str]]:
-    """Return {key_value: [cust_id1, cust_id2, ...]} for keys appearing > once."""
+    """Return {key_value: [cust_id1, cust_id2, ...]} for keys appearing > once.
+
+    Casts both columns to VARCHAR so the query works even when DuckDB auto-typed
+    a column as INT64 (e.g. a purely numeric customer_id like UCID).
+    """
     with duckdb.connect() as con:
         con.register("tbl", df.to_arrow())
         rows = con.execute(f"""
-            SELECT a.{key_col}, a.{id_col}
+            SELECT a.{key_col}::VARCHAR, a.{id_col}::VARCHAR
             FROM tbl a
-            WHERE a.{key_col} IS NOT NULL AND a.{key_col} <> ''
+            WHERE a.{key_col} IS NOT NULL AND a.{key_col}::VARCHAR <> ''
               AND EXISTS (
                   SELECT 1 FROM tbl b
-                  WHERE b.{key_col} = a.{key_col}
-                    AND b.{id_col} <> a.{id_col}
-                    AND b.{id_col} IS NOT NULL AND b.{id_col} <> ''
+                  WHERE b.{key_col}::VARCHAR = a.{key_col}::VARCHAR
+                    AND b.{id_col}::VARCHAR <> a.{id_col}::VARCHAR
+                    AND b.{id_col} IS NOT NULL AND b.{id_col}::VARCHAR <> ''
               )
-            ORDER BY a.{key_col}
+            ORDER BY a.{key_col}::VARCHAR
         """).fetchall()
     result: dict[str, list[str]] = {}
     for key, cid in rows:
-        result.setdefault(key, []).append(cid)
+        result.setdefault(str(key), []).append(str(cid))
     return result
 
 

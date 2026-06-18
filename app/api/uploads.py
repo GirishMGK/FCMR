@@ -23,7 +23,7 @@ templates = Jinja2Templates(directory=str(_templates_dir))
 # Dashboard
 # ---------------------------------------------------------------------------
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("", response_class=HTMLResponse)
 async def dashboard(request: Request):
     uploads = store.list_uploads()
     report_types = available_report_types()

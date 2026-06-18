@@ -1,3 +1,4 @@
+import secrets
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -22,6 +23,21 @@ class Settings(BaseSettings):
 
     # Aadhaar — salt is environment-injectable; do NOT hardcode a real value here.
     aadhaar_hash_salt: str = "change-me-via-FCMR_AADHAAR_HASH_SALT"
+
+    # Session secret for signed cookies; persisted in data/ so sessions survive restarts
+    session_secret: str = ""
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        # If session_secret is not provided, load from or generate one in data/
+        if not self.session_secret:
+            secret_file = self.data_dir / ".session_secret"
+            if secret_file.exists():
+                self.session_secret = secret_file.read_text().strip()
+            else:
+                self.session_secret = secrets.token_urlsafe(32)
+                self.data_dir.mkdir(parents=True, exist_ok=True)
+                secret_file.write_text(self.session_secret)
 
     def ensure_dirs(self) -> None:
         for d in (self.uploads_dir, self.parquet_dir, self.outputs_dir):
