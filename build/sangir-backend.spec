@@ -7,7 +7,6 @@ Output: dist/sangir-backend/ (one-dir bundle with all deps)
 """
 
 import os
-from PyInstaller.utils.hooks import get_module_collection_mode
 from PyInstaller.building.datastruct import Tree
 
 block_cipher = None
