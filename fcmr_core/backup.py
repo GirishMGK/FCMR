@@ -4,9 +4,8 @@ Creates encrypted (or plaintext) zip backups of the catalog and outputs.
 Used for data safety and migration.
 """
 
-import shutil
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fcmr_core.config import settings
@@ -21,7 +20,7 @@ def create_backup() -> Path:
     settings.ensure_dirs()
 
     # Timestamp for unique backup filename
-    now = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    now = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     backup_file = settings.backups_dir / f"SAND_Backup_{now}.zip"
 
     # Create zip with catalog and outputs

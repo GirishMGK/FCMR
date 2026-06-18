@@ -2,25 +2,24 @@
 
 from __future__ import annotations
 
-import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import polars as pl
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from fcmr_core.catalog import store
 from fcmr_core.config import settings
 from fcmr_core.ingestion.pipeline import read_parquet
 from fcmr_core.logging_setup import get_logger
+from fcmr_core.reporting.aggregation import aggregate_exception_codes, aggregate_status_counts
 from fcmr_core.reporting.builder import build_exception_csvs
-from fcmr_core.reporting.aggregation import aggregate_status_counts, aggregate_exception_codes
-from fcmr_core.reporting.charts import build_donut_svg, build_bar_chart
+from fcmr_core.reporting.charts import build_bar_chart, build_donut_svg
 from fcmr_core.reporting.workpaper import build_workpaper
-from fcmr_core.sampling.sample import select_sample
 from fcmr_core.rules.registry import run_pipeline
+from fcmr_core.sampling.sample import select_sample
 
 logger = get_logger("processing")
 
@@ -59,7 +58,9 @@ def _run_analytics(run_id: str, upload_id: str) -> None:
         out_dir = settings.outputs_dir / run_id
         wide_path, long_path = build_exception_csvs(annotated, run_id, out_dir)
 
-        logger.info("job_complete run_id=%s wide=%s long=%s", run_id, wide_path.name, long_path.name)
+        logger.info(
+            "job_complete run_id=%s wide=%s long=%s", run_id, wide_path.name, long_path.name
+        )
         store.update_run(
             run_id,
             status="completed",
@@ -232,4 +233,4 @@ async def export_workpaper(run_id: str):
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()

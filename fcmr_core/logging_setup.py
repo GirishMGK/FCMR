@@ -11,7 +11,6 @@ All PII (PAN, Aadhaar, names, account numbers) is NEVER logged.
 
 import logging
 import logging.handlers
-from pathlib import Path
 
 from fcmr_core.config import settings
 

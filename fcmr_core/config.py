@@ -2,6 +2,7 @@ import os
 import secrets
 import sys
 from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # On Vercel the filesystem is read-only except /tmp
@@ -50,7 +51,8 @@ class Settings(BaseSettings):
         elif getattr(sys, "frozen", False):
             # Running as PyInstaller bundle — use per-user appdata path
             if sys.platform == "win32":
-                data_root = Path(os.getenv("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "SanGirAutomations"
+                local_appdata = os.getenv("LOCALAPPDATA", Path.home() / "AppData" / "Local")
+                data_root = Path(local_appdata) / "SanGirAutomations"
             else:
                 data_root = Path.home() / ".sangir"
         else:
@@ -86,7 +88,14 @@ class Settings(BaseSettings):
                     secret_file.write_text(self.session_secret)
 
     def ensure_dirs(self) -> None:
-        for d in (self.uploads_dir, self.parquet_dir, self.outputs_dir, self.logs_dir, self.backups_dir):
+        dirs = (
+            self.uploads_dir,
+            self.parquet_dir,
+            self.outputs_dir,
+            self.logs_dir,
+            self.backups_dir,
+        )
+        for d in dirs:
             d.mkdir(parents=True, exist_ok=True)
 
 

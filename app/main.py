@@ -9,11 +9,12 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
+from app.api import auth, blob_upload, downloads, engagements, runs, uploads
+from app.api import settings as settings_api
 from fcmr_core.catalog import store
 from fcmr_core.catalog.store import init_catalog
 from fcmr_core.config import settings
 from fcmr_core.logging_setup import get_logger
-from app.api import auth, blob_upload, downloads, engagements, runs, settings as settings_api, uploads
 
 logger = get_logger("app")
 
@@ -31,7 +32,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="SanGir Automations",
-    description="Audit Analytics & Automated Solutions — Deterministic KYC and data-quality analytics for NBFC loan audits.",
+    description=(
+        "Audit Analytics & Automated Solutions — "
+        "Deterministic KYC and data-quality analytics for NBFC loan audits."
+    ),
     version="0.1.0",
     lifespan=lifespan,
 )

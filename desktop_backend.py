@@ -8,6 +8,7 @@ In production: PyInstaller creates an .exe that runs this on port 8765.
 """
 
 import os
+
 import uvicorn
 
 # Get backend port from environment (Electron launcher sets to 8765; dev default 8000)
