@@ -321,5 +321,10 @@ async def upload_detail(request: Request, upload_id: str):
     return templates.TemplateResponse(
         request=request,
         name="upload_detail.html",
-        context={"upload": upload, "runs": runs, "mapping_display": mapping_display, "categories": categories},
+        context={
+            "upload": upload,
+            "runs": runs,
+            "mapping_display": mapping_display,
+            "categories": categories,
+        },
     )
