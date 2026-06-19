@@ -21,6 +21,9 @@
         <dt>Status</dt><dd><span class="badge badge-{{ run.status }}">{{ run.status }}</span></dd>
         <dt>Started</dt><dd class="timestamp">{{ run.started_at[:19].replace("T"," ") if run.started_at else "—" }} UTC</dd>
         <dt>Finished</dt><dd class="timestamp">{{ run.finished_at[:19].replace("T"," ") if run.finished_at else "—" }} UTC</dd>
+        {% if ran_categories %}
+        <dt>Ran</dt><dd>{{ ran_categories }}</dd>
+        {% endif %}
         {% if run.error %}
         <dt>Error</dt><dd class="error-text">{{ run.error }}</dd>
         {% endif %}

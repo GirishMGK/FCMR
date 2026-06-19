@@ -306,6 +306,8 @@ async def do_map_columns(request: Request, upload_id: str):
 
 @router.get("/uploads/{upload_id}", response_class=HTMLResponse)
 async def upload_detail(request: Request, upload_id: str):
+    from fcmr_core.rules.registry import list_categories
+
     upload = store.get_upload(upload_id)
     if not upload:
         raise HTTPException(status_code=404, detail="Upload not found")
@@ -315,8 +317,9 @@ async def upload_detail(request: Request, upload_id: str):
         mapping_display = list(json.loads(upload["column_mapping"]).items())
 
     runs = store.list_runs(upload_id)
+    categories = list_categories()
     return templates.TemplateResponse(
         request=request,
         name="upload_detail.html",
-        context={"upload": upload, "runs": runs, "mapping_display": mapping_display},
+        context={"upload": upload, "runs": runs, "mapping_display": mapping_display, "categories": categories},
     )

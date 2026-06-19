@@ -8,7 +8,7 @@ from pathlib import Path
 
 import polars as pl
 import psutil
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -20,7 +20,7 @@ from fcmr_core.reporting.aggregation import aggregate_exception_codes, aggregate
 from fcmr_core.reporting.builder import build_exception_csvs
 from fcmr_core.reporting.charts import build_bar_chart, build_donut_svg
 from fcmr_core.reporting.workpaper import build_workpaper
-from fcmr_core.rules.registry import run_pipeline
+from fcmr_core.rules.registry import resolve_rule_ids, run_pipeline
 from fcmr_core.sampling.sample import select_sample
 
 logger = get_logger("processing")
@@ -40,7 +40,13 @@ templates = Jinja2Templates(directory=str(_templates_dir))
 
 
 @router.post("/uploads/{upload_id}/run")
-async def start_run(upload_id: str, background_tasks: BackgroundTasks):
+async def start_run(
+    upload_id: str,
+    background_tasks: BackgroundTasks,
+    mode: str = Form("all"),
+    categories: list[str] = Form([]),
+    rules: list[str] = Form([]),
+):
     upload = store.get_upload(upload_id)
     if not upload:
         raise HTTPException(status_code=404, detail="Upload not found")
@@ -50,7 +56,13 @@ async def start_run(upload_id: str, background_tasks: BackgroundTasks):
     run_id = store.create_run(upload_id)
     store.update_run(run_id, status="running", started_at=_now())
 
-    background_tasks.add_task(_run_analytics, run_id, upload_id)
+    # Resolve category selection to rule_ids
+    if mode == "all":
+        rule_ids = None
+    else:
+        rule_ids = resolve_rule_ids(categories, rules)
+
+    background_tasks.add_task(_run_analytics, run_id, upload_id, rule_ids)
 
     return RedirectResponse(url=f"/runs/{run_id}", status_code=303)
 
@@ -81,8 +93,9 @@ async def run_status(run_id: str):
     )
 
 
-def _run_analytics(run_id: str, upload_id: str) -> None:
+def _run_analytics(run_id: str, upload_id: str, rule_ids: list[str] | None = None) -> None:
     """Execute the full analytics pipeline and update the catalog when done."""
+    import json
 
     def _check_cancel() -> None:
         """Raise _RunCancelled if a stop was requested."""
@@ -99,7 +112,11 @@ def _run_analytics(run_id: str, upload_id: str) -> None:
 
     try:
         upload = store.get_upload(upload_id)
-        logger.info("job_start run_id=%s upload_id=%s", run_id, upload_id)
+        logger.info("job_start run_id=%s upload_id=%s rule_ids=%s", run_id, upload_id, rule_ids)
+
+        # Store the selected rules (None = all)
+        selected_rules_str = json.dumps(rule_ids) if rule_ids else None
+        store.update_run(run_id, selected_rules=selected_rules_str)
 
         _check_cancel()
         store.update_run(run_id, progress_step="Loading data file", progress_pct=2)
@@ -130,7 +147,7 @@ def _run_analytics(run_id: str, upload_id: str) -> None:
         logger.info("job_loaded run_id=%s rows=%d", run_id, len(df))
 
         store.update_run(run_id, progress_step="Starting validation rules…", progress_pct=5)
-        annotated = run_pipeline(df, on_progress=_on_rule_progress)
+        annotated = run_pipeline(df, on_progress=_on_rule_progress, rule_ids=rule_ids)
 
         # Release the input frame and rule-annotated columns we no longer need.
         del df
@@ -166,6 +183,10 @@ def _run_analytics(run_id: str, upload_id: str) -> None:
 
 @router.get("/runs/{run_id}", response_class=HTMLResponse)
 async def run_detail(request: Request, run_id: str):
+    import json
+
+    from fcmr_core.rules.registry import CATEGORIES
+
     run = store.get_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -173,6 +194,24 @@ async def run_detail(request: Request, run_id: str):
     donut_svg = None
     bar_svg = None
     summary = None
+    ran_categories = None
+
+    # Map selected_rules to category labels
+    if run.get("selected_rules"):
+        try:
+            selected_rules = json.loads(run["selected_rules"])
+            if selected_rules:
+                selected_set = set(selected_rules)
+                matching_cats = []
+                for cat in CATEGORIES:
+                    if all(r in selected_set for r in cat["rule_ids"]):
+                        matching_cats.append(cat["label"])
+                if matching_cats:
+                    ran_categories = ", ".join(matching_cats)
+        except Exception:
+            pass
+    if not ran_categories:
+        ran_categories = "All Categories"
 
     if run["status"] == "completed" and run["wide_csv"]:
         wide_path = Path(run["wide_csv"])
@@ -203,6 +242,7 @@ async def run_detail(request: Request, run_id: str):
             "summary": summary,
             "donut_svg": donut_svg,
             "bar_svg": bar_svg,
+            "ran_categories": ran_categories,
         },
     )
 

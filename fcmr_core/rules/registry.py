@@ -33,6 +33,54 @@ class RuleMeta:
 
 _REGISTRY: list[RuleMeta] = []
 
+CATEGORIES = [
+    {
+        "id": "kyc_format",
+        "label": "KYC & Document Format",
+        "rule_ids": [
+            "pan_format",
+            "aadhaar_format",
+            "voter_id_format",
+            "passport_format",
+            "dl_format",
+            "mobile_format",
+            "email_format",
+            "dob_validity",
+            "dob_age_range",
+            "bank_account_invalid_length",
+            "email_company_generic_domain",
+        ],
+    },
+    {
+        "id": "address_pin",
+        "label": "Address & PIN",
+        "rule_ids": [
+            "pincode_exists",
+            "state_pin_match",
+            "district_pin_match",
+            "address_completeness",
+        ],
+    },
+    {
+        "id": "duplicates",
+        "label": "Duplicate Detection",
+        "rule_ids": [
+            "pan_duplicate",
+            "aadhaar_duplicate",
+            "mobile_duplicate",
+            "bank_account_duplicate",
+            "name_dob_duplicate",
+            "voter_id_duplicate",
+            "address_duplicate",
+        ],
+    },
+    {
+        "id": "identity_grouping",
+        "label": "Identity Grouping (UCID + Beneficiary)",
+        "rule_ids": ["ucid", "beneficiary_tagging"],
+    },
+]
+
 
 def register(rule_id: str, description: str) -> Callable[[RuleFn], RuleFn]:
     """Decorator to register a rule function."""
@@ -48,18 +96,71 @@ def list_rules() -> list[RuleMeta]:
     return list(_REGISTRY)
 
 
+def list_categories() -> list[dict]:
+    """Return categories enriched with rule descriptions."""
+    _ensure_rules_loaded()
+    rule_map = {m.rule_id: m.description for m in _REGISTRY}
+    result = []
+    for cat in CATEGORIES:
+        rules = []
+        for rule_id in cat["rule_ids"]:
+            rules.append({"id": rule_id, "description": rule_map.get(rule_id, "")})
+        result.append(
+            {"id": cat["id"], "label": cat["label"], "rules": rules, "count": len(rules)}
+        )
+    return result
+
+
+def resolve_rule_ids(
+    category_ids: list[str], rule_ids: list[str]
+) -> list[str] | None:
+    """Resolve selected categories and rules into a unified rule_ids list.
+
+    Args:
+        category_ids: Selected category IDs.
+        rule_ids: Explicitly selected rule IDs.
+
+    Returns:
+        Merged list of rule IDs, or None if neither is provided (= run all).
+    """
+    if not category_ids and not rule_ids:
+        return None
+
+    selected = set()
+    for cat_id in category_ids:
+        for cat in CATEGORIES:
+            if cat["id"] == cat_id:
+                selected.update(cat["rule_ids"])
+                break
+    selected.update(rule_ids)
+    return sorted(selected) if selected else None
+
+
 def run_pipeline(
     df: pl.DataFrame,
     on_progress: ProgressFn | None = None,
+    rule_ids: list[str] | None = None,
 ) -> pl.DataFrame:
-    """Run all registered rules in registration order, returning an annotated frame.
+    """Run registered rules in registration order, returning an annotated frame.
 
-    on_progress(completed, total, rule_id) is called after each rule if provided.
-    It may raise an exception to abort the pipeline early (e.g. on cancellation).
+    Args:
+        df: Input DataFrame.
+        on_progress: Callback (completed, total, rule_id) after each rule.
+        rule_ids: If provided, run only these rule IDs (preserving registry order).
+                  If None, run all registered rules.
+
+    Returns:
+        Annotated frame with _exc_* columns appended per rule.
     """
     _ensure_rules_loaded()
-    total = len(_REGISTRY)
-    for idx, meta in enumerate(_REGISTRY):
+    if rule_ids is None:
+        selected_registry = _REGISTRY
+    else:
+        selected_set = set(rule_ids)
+        selected_registry = [m for m in _REGISTRY if m.rule_id in selected_set]
+
+    total = len(selected_registry)
+    for idx, meta in enumerate(selected_registry):
         df = meta.fn(df)
         if on_progress:
             on_progress(idx + 1, total, meta.rule_id)

@@ -1,0 +1,187 @@
+"""Tests for rule categorization and filtered pipeline execution."""
+
+from __future__ import annotations
+
+import tempfile
+from pathlib import Path
+
+import polars as pl
+import pytest
+
+from fcmr_core.rules.registry import CATEGORIES, list_categories, resolve_rule_ids, run_pipeline
+
+
+def test_categories_coverage():
+    """Verify all registered rules appear in exactly one category."""
+    from fcmr_core.rules.registry import _ensure_rules_loaded, list_rules
+
+    _ensure_rules_loaded()
+    all_rules = {m.rule_id for m in list_rules()}
+
+    # Collect all rule_ids from categories
+    categorized_rules = set()
+    for cat in CATEGORIES:
+        for rule_id in cat["rule_ids"]:
+            assert rule_id in all_rules, f"Unknown rule in category: {rule_id}"
+            assert rule_id not in categorized_rules, f"Rule {rule_id} in multiple categories"
+            categorized_rules.add(rule_id)
+
+    # All registered rules must be in exactly one category
+    assert (
+        categorized_rules == all_rules
+    ), f"Missing rules: {all_rules - categorized_rules}, Extra: {categorized_rules - all_rules}"
+
+
+def test_list_categories():
+    """Verify list_categories returns enriched category data."""
+    cats = list_categories()
+    assert len(cats) == 4
+    assert all("id" in c and "label" in c and "rules" in c and "count" in c for c in cats)
+    assert {c["id"] for c in cats} == {"kyc_format", "address_pin", "duplicates", "identity_grouping"}
+    # Check rule counts
+    assert cats[0]["count"] == 11  # kyc_format
+    assert cats[1]["count"] == 4  # address_pin
+    assert cats[2]["count"] == 7  # duplicates
+    assert cats[3]["count"] == 2  # identity_grouping
+
+
+def test_resolve_rule_ids_empty():
+    """Resolve with no selection returns None (run all)."""
+    result = resolve_rule_ids([], [])
+    assert result is None
+
+
+def test_resolve_rule_ids_by_category():
+    """Resolve by category IDs."""
+    result = resolve_rule_ids(["duplicates"], [])
+    assert result is not None
+    assert set(result) == {
+        "pan_duplicate",
+        "aadhaar_duplicate",
+        "mobile_duplicate",
+        "bank_account_duplicate",
+        "name_dob_duplicate",
+        "voter_id_duplicate",
+        "address_duplicate",
+    }
+
+
+def test_resolve_rule_ids_by_rule():
+    """Resolve by individual rule IDs."""
+    result = resolve_rule_ids([], ["pan_format", "pincode_exists"])
+    assert result == ["pan_format", "pincode_exists"]
+
+
+def test_resolve_rule_ids_union():
+    """Resolve merges categories and individual rules."""
+    result = resolve_rule_ids(["address_pin"], ["pan_format"])
+    expected = {
+        "pincode_exists",
+        "state_pin_match",
+        "district_pin_match",
+        "address_completeness",
+        "pan_format",
+    }
+    assert set(result) == expected
+
+
+def test_run_pipeline_all_rules():
+    """run_pipeline with rule_ids=None runs all rules."""
+    from fcmr_core.rules.registry import _ensure_rules_loaded, list_rules
+
+    _ensure_rules_loaded()
+    all_rule_ids = {m.rule_id for m in list_rules()}
+
+    # Create minimal test dataframe
+    df = pl.DataFrame(
+        {
+            "customer_id": ["C001"],
+            "pan": ["AAAA12023A"],
+            "aadhaar": ["123456789012"],
+            "full_name": ["Test"],
+        }
+    )
+
+    annotated = run_pipeline(df, rule_ids=None)
+
+    # Check all rules were executed (all _exc_* columns present)
+    exc_cols = {c for c in annotated.columns if c.startswith("_exc_")}
+    rule_ids_executed = {c.split("_exc_")[1].rsplit("_", 2)[0] for c in exc_cols if "_status" in c}
+    assert rule_ids_executed == all_rule_ids
+
+
+def test_run_pipeline_filtered():
+    """run_pipeline with rule_ids filters to selected rules only."""
+    df = pl.DataFrame(
+        {
+            "customer_id": ["C001"],
+            "pan": ["AAAA12023A"],
+            "aadhaar": ["123456789012"],
+            "full_name": ["Test"],
+        }
+    )
+
+    # Run only duplicates category
+    annotated = run_pipeline(df, rule_ids=["pan_duplicate", "aadhaar_duplicate"])
+
+    # Check only selected rules were executed
+    exc_cols = {c for c in annotated.columns if c.startswith("_exc_")}
+    rule_ids_executed = {c.split("_exc_")[1].rsplit("_", 2)[0] for c in exc_cols if "_status" in c}
+    assert rule_ids_executed == {"pan_duplicate", "aadhaar_duplicate"}
+
+
+def test_run_pipeline_preserves_order():
+    """run_pipeline preserves registry order even when filtered."""
+    from fcmr_core.rules.registry import _ensure_rules_loaded, list_rules
+
+    _ensure_rules_loaded()
+    all_rules = list_rules()
+
+    # Select a subset
+    selected = ["pan_format", "pincode_exists", "pan_duplicate"]
+
+    df = pl.DataFrame(
+        {
+            "customer_id": ["C001"],
+            "pan": ["AAAA12023A"],
+            "aadhaar": ["123456789012"],
+            "full_name": ["Test"],
+            "pincode": ["560001"],
+        }
+    )
+
+    progress_calls = []
+
+    def track_progress(completed: int, total: int, rule_id: str):
+        progress_calls.append(rule_id)
+
+    annotated = run_pipeline(df, on_progress=track_progress, rule_ids=selected)
+
+    # Check progress calls match registry order
+    expected_order = [r.rule_id for r in all_rules if r.rule_id in selected]
+    assert progress_calls == expected_order
+
+
+def test_run_pipeline_progress_callback():
+    """on_progress callback receives correct completed/total counts."""
+    df = pl.DataFrame(
+        {
+            "customer_id": ["C001"],
+            "pan": ["AAAA12023A"],
+            "aadhaar": ["123456789012"],
+            "full_name": ["Test"],
+        }
+    )
+
+    progress_calls = []
+
+    def track_progress(completed: int, total: int, rule_id: str):
+        progress_calls.append((completed, total, rule_id))
+
+    # Run only 2 rules
+    annotated = run_pipeline(df, on_progress=track_progress, rule_ids=["pan_format", "aadhaar_format"])
+
+    # Check progress: completed should increment, total should be 2
+    assert len(progress_calls) == 2
+    assert progress_calls[0] == (1, 2, "pan_format")
+    assert progress_calls[1] == (2, 2, "aadhaar_format")

@@ -92,6 +92,7 @@ def init_catalog() -> None:
             ("workpaper_path", "TEXT"),
             ("progress_step", "TEXT"),
             ("progress_pct", "INTEGER"),
+            ("selected_rules", "TEXT"),
         ]:
             try:
                 con.execute(f"ALTER TABLE runs ADD COLUMN {col} {dtype}")
@@ -274,6 +275,7 @@ def update_run(run_id: str, **kwargs: str | None) -> None:
         "workpaper_path",
         "progress_step",
         "progress_pct",
+        "selected_rules",
     }
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if not fields:
