@@ -229,8 +229,8 @@ def _build_detailed_exceptions_sheet(ws, wide_csv_path, header_fill, header_font
             cell.font = header_font
 
         # Data rows
-        for row_idx, row_data in enumerate(df.iter_rows(values_only=True), 2):
-            for col_idx, value in enumerate(row_data, 1):
+        for row_idx, row in enumerate(df.rows(), 2):
+            for col_idx, value in enumerate(row, 1):
                 cell = ws.cell(row=row_idx, column=col_idx, value=value)
                 cell.border = border
 
