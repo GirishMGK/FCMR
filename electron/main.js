@@ -145,7 +145,7 @@ app.on("ready", async () => {
     await spawnBackend();
     await waitForBackend();
     createWindow();
-    initUpdater();
+    initUpdater(mainWindow);
 
     const template = [
       {
@@ -171,8 +171,23 @@ app.on("ready", async () => {
             },
           },
           {
-            label: "Open Log File",
+            label: "Check for Updates",
+            click: () => {
+              const { autoUpdater } = require("electron-updater");
+              autoUpdater.checkForUpdates().catch(() => {});
+            },
+          },
+          { type: "separator" },
+          {
+            label: "Open Backend Log",
             click: () => { shell.openPath(BACKEND_LOG); },
+          },
+          {
+            label: "Open Update Log",
+            click: () => {
+              const updateLog = require("path").join(app.getPath("userData"), "logs", "update.log");
+              shell.openPath(updateLog);
+            },
           },
         ],
       },

@@ -1,62 +1,123 @@
 /**
  * Auto-updater for SanGir Automations desktop app.
  *
- * Silent update strategy (Claude-style):
+ * Update flow:
  *   1. Check for updates on startup and every 4 hours.
- *   2. Download silently in the background — no dialogs, no prompts.
- *   3. Install automatically the next time the user quits the app.
+ *   2. If found, download silently in the background.
+ *   3. When downloaded, show a dialog: "Restart now" or "Later".
+ *   4. On "Later", install automatically on the next quit.
  *
- * The user never sees a dialog. They just open the app after closing it
- * and it is already on the new version.
+ * All events are logged to update.log so users can verify it's working.
  */
 
 const { autoUpdater } = require("electron-updater");
+const { app, dialog, Notification } = require("electron");
+const path = require("path");
+const fs = require("fs");
 
-const log = {
-  info: (...args) => console.log("[updater]", ...args),
-  error: (...args) => console.error("[updater]", ...args),
-};
+const LOG_DIR = path.join(app.getPath("userData"), "logs");
+const UPDATE_LOG = path.join(LOG_DIR, "update.log");
 
-function initUpdater() {
-  // Install silently on next quit — no explicit quitAndInstall call needed.
+function ensureLogDir() {
+  try {
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+  } catch (_) {}
+}
+
+function writeLog(line) {
+  ensureLogDir();
+  try {
+    fs.appendFileSync(UPDATE_LOG, `[${new Date().toISOString()}] ${line}\n`);
+  } catch (_) {}
+}
+
+function showNotification(title, body) {
+  if (Notification.isSupported()) {
+    new Notification({ title, body, silent: true }).show();
+  }
+}
+
+function initUpdater(mainWindow) {
+  writeLog(`=== Auto-updater starting (current: v${app.getVersion()}) ===`);
+
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.autoDownload = true;
 
   autoUpdater.on("checking-for-update", () => {
-    log.info("Checking for updates...");
+    writeLog("Checking for updates...");
   });
 
   autoUpdater.on("update-available", (info) => {
-    log.info(`Update available: ${info.version} — downloading silently`);
+    writeLog(`Update available: v${info.version} (released ${info.releaseDate})`);
+    showNotification(
+      "Update available — SanGir Automations",
+      `v${info.version} is downloading in the background.`
+    );
   });
 
-  autoUpdater.on("update-not-available", () => {
-    log.info("App is up to date");
+  autoUpdater.on("update-not-available", (info) => {
+    writeLog(`Up to date (v${info.version})`);
   });
 
   autoUpdater.on("error", (err) => {
-    // Non-fatal — log and continue. Offline users should not see a crash.
-    log.error(`Update check failed: ${err.message}`);
+    writeLog(`Update error: ${err.message}`);
+    writeLog(`  Stack: ${err.stack || "(no stack)"}`);
   });
 
   autoUpdater.on("download-progress", (progress) => {
-    log.info(`Downloading: ${Math.round(progress.percent)}%`);
+    const pct = Math.round(progress.percent);
+    const mbps = (progress.bytesPerSecond / 1024 / 1024).toFixed(1);
+    writeLog(`Downloading: ${pct}% at ${mbps} MB/s`);
   });
 
   autoUpdater.on("update-downloaded", (info) => {
-    log.info(`v${info.version} downloaded — will install on next quit`);
-  });
+    writeLog(`v${info.version} downloaded — showing restart dialog`);
+    showNotification(
+      "Update ready — SanGir Automations",
+      `v${info.version} is ready. Restart to apply.`
+    );
 
-  // Check on startup, then every 4 hours.
-  autoUpdater.checkForUpdates().catch((err) => {
-    log.error(`Initial update check failed: ${err.message}`);
-  });
+    // Show restart dialog attached to the main window
+    const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    const opts = {
+      type: "info",
+      title: "Update Ready",
+      message: `SanGir Automations v${info.version} is ready to install.`,
+      detail:
+        "Click 'Restart Now' to apply the update immediately, or 'Later' to install it the next time you close the app.",
+      buttons: ["Restart Now", "Later"],
+      defaultId: 0,
+      cancelId: 1,
+    };
 
-  setInterval(() => {
-    autoUpdater.checkForUpdates().catch((err) => {
-      log.error(`Periodic update check failed: ${err.message}`);
+    const promise = win
+      ? dialog.showMessageBox(win, opts)
+      : dialog.showMessageBox(opts);
+
+    promise.then(({ response }) => {
+      if (response === 0) {
+        writeLog("User chose Restart Now — installing...");
+        autoUpdater.quitAndInstall(false, true);
+      } else {
+        writeLog("User chose Later — will install on next quit");
+      }
     });
-  }, 4 * 60 * 60 * 1000);
+  });
+
+  // Check on startup
+  autoUpdater.checkForUpdates().catch((err) => {
+    writeLog(`Startup update check failed: ${err.message}`);
+  });
+
+  // Re-check every 4 hours
+  setInterval(
+    () => {
+      autoUpdater.checkForUpdates().catch((err) => {
+        writeLog(`Periodic update check failed: ${err.message}`);
+      });
+    },
+    4 * 60 * 60 * 1000
+  );
 }
 
 module.exports = { initUpdater };
