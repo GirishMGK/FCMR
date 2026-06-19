@@ -229,10 +229,12 @@ def rule_ucid(df: pl.DataFrame) -> pl.DataFrame:
                     "(PAN, Aadhaar, Voter ID, email, mobile, state, or pincode)"
                 )
 
-    return df.with_columns([
-        pl.Series("ucid", ucids, dtype=pl.Utf8),
-        pl.Series("ucid_size", ucid_sizes, dtype=pl.Int32),
-        pl.Series("_exc_ucid_status", statuses, dtype=pl.Utf8),
-        pl.Series("_exc_ucid_code", codes, dtype=pl.Utf8),
-        pl.Series("_exc_ucid_desc", descs, dtype=pl.Utf8),
-    ])
+    return df.with_columns(
+        [
+            pl.Series("ucid", ucids, dtype=pl.Utf8),
+            pl.Series("ucid_size", ucid_sizes, dtype=pl.Int32),
+            pl.Series("_exc_ucid_status", statuses, dtype=pl.Utf8),
+            pl.Series("_exc_ucid_code", codes, dtype=pl.Utf8),
+            pl.Series("_exc_ucid_desc", descs, dtype=pl.Utf8),
+        ]
+    )

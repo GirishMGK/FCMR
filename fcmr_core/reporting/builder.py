@@ -57,22 +57,21 @@ def build_exception_csvs(
             for rid in rule_ids
         ]
         # exception_count = number of rules with a non-empty code.
-        count_expr = pl.sum_horizontal([
-            (pl.col(f"_exc_{rid}_code").fill_null("") != "").cast(pl.Int32)
-            for rid in rule_ids
-        ])
+        count_expr = pl.sum_horizontal(
+            [(pl.col(f"_exc_{rid}_code").fill_null("") != "").cast(pl.Int32) for rid in rule_ids]
+        )
         # Codes/descs: blank → null so concat_str(ignore_nulls) skips them,
         # preserving rule order and pipe-joining only the ones that fired.
         code_exprs = [
             pl.when(pl.col(f"_exc_{rid}_code").fill_null("") == "")
-              .then(pl.lit(None, dtype=pl.Utf8))
-              .otherwise(pl.col(f"_exc_{rid}_code").fill_null(""))
+            .then(pl.lit(None, dtype=pl.Utf8))
+            .otherwise(pl.col(f"_exc_{rid}_code").fill_null(""))
             for rid in rule_ids
         ]
         desc_exprs = [
             pl.when(pl.col(f"_exc_{rid}_desc").fill_null("") == "")
-              .then(pl.lit(None, dtype=pl.Utf8))
-              .otherwise(pl.col(f"_exc_{rid}_desc").fill_null(""))
+            .then(pl.lit(None, dtype=pl.Utf8))
+            .otherwise(pl.col(f"_exc_{rid}_desc").fill_null(""))
             for rid in rule_ids
         ]
 
@@ -81,26 +80,32 @@ def build_exception_csvs(
         overall = pl.col("_worst_sev").replace_strict(_SEVERITY_REV, default="OK")
 
         wide_df = (
-            annotated.with_columns([
-                pl.max_horizontal(sev_exprs).alias("_worst_sev"),
-                count_expr.alias("exception_count"),
-                codes_joined.alias("exception_codes"),
-                descs_joined.alias("exception_descriptions"),
-            ])
+            annotated.with_columns(
+                [
+                    pl.max_horizontal(sev_exprs).alias("_worst_sev"),
+                    count_expr.alias("exception_count"),
+                    codes_joined.alias("exception_codes"),
+                    descs_joined.alias("exception_descriptions"),
+                ]
+            )
             .with_columns(overall.alias("overall_status"))
             .drop([*exc_cols, "_worst_sev"])
-            .with_columns([
-                pl.col("exception_codes").fill_null(""),
-                pl.col("exception_descriptions").fill_null(""),
-            ])
+            .with_columns(
+                [
+                    pl.col("exception_codes").fill_null(""),
+                    pl.col("exception_descriptions").fill_null(""),
+                ]
+            )
         )
     else:
-        wide_df = base_df.with_columns([
-            pl.lit("OK").alias("overall_status"),
-            pl.lit(0, dtype=pl.Int32).alias("exception_count"),
-            pl.lit("").alias("exception_codes"),
-            pl.lit("").alias("exception_descriptions"),
-        ])
+        wide_df = base_df.with_columns(
+            [
+                pl.lit("OK").alias("overall_status"),
+                pl.lit(0, dtype=pl.Int32).alias("exception_count"),
+                pl.lit("").alias("exception_codes"),
+                pl.lit("").alias("exception_descriptions"),
+            ]
+        )
 
     wide_df.write_csv(str(wide_path))
 
@@ -111,28 +116,34 @@ def build_exception_csvs(
 
     parts: list[pl.DataFrame] = []
     for rid in rule_ids:
-        part = annotated.select([
-            (pl.col("_row_num") if has_rownum else pl.lit(None)).alias("_row_num"),
-            (pl.col("customer_id").cast(pl.Utf8) if has_cid else pl.lit("")).alias("customer_id"),
-            pl.lit(rid).alias("rule_id"),
-            pl.col(f"_exc_{rid}_status").fill_null("OK").alias("status"),
-            pl.col(f"_exc_{rid}_code").fill_null("").alias("exception_code"),
-            pl.col(f"_exc_{rid}_desc").fill_null("").alias("exception_description"),
-        ]).filter(pl.col("status") != "OK")
+        part = annotated.select(
+            [
+                (pl.col("_row_num") if has_rownum else pl.lit(None)).alias("_row_num"),
+                (pl.col("customer_id").cast(pl.Utf8) if has_cid else pl.lit("")).alias(
+                    "customer_id"
+                ),
+                pl.lit(rid).alias("rule_id"),
+                pl.col(f"_exc_{rid}_status").fill_null("OK").alias("status"),
+                pl.col(f"_exc_{rid}_code").fill_null("").alias("exception_code"),
+                pl.col(f"_exc_{rid}_desc").fill_null("").alias("exception_description"),
+            ]
+        ).filter(pl.col("status") != "OK")
         if part.height > 0:
             parts.append(part)
 
     if parts:
         long_df = pl.concat(parts, how="vertical")
     else:
-        long_df = pl.DataFrame({
-            "_row_num": pl.Series([], dtype=pl.Int64),
-            "customer_id": pl.Series([], dtype=pl.Utf8),
-            "rule_id": pl.Series([], dtype=pl.Utf8),
-            "status": pl.Series([], dtype=pl.Utf8),
-            "exception_code": pl.Series([], dtype=pl.Utf8),
-            "exception_description": pl.Series([], dtype=pl.Utf8),
-        })
+        long_df = pl.DataFrame(
+            {
+                "_row_num": pl.Series([], dtype=pl.Int64),
+                "customer_id": pl.Series([], dtype=pl.Utf8),
+                "rule_id": pl.Series([], dtype=pl.Utf8),
+                "status": pl.Series([], dtype=pl.Utf8),
+                "exception_code": pl.Series([], dtype=pl.Utf8),
+                "exception_description": pl.Series([], dtype=pl.Utf8),
+            }
+        )
     long_df.write_csv(str(long_path))
 
     return wide_path, long_path

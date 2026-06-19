@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
@@ -123,10 +123,13 @@ def init_catalog() -> None:
 
         # Create a default engagement for existing uploads
         try:
-            con.execute("""
+            con.execute(
+                """
                 INSERT INTO engagements (engagement_id, name, client_name, status, created_by, created_at)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, ["default", "Default Engagement", "Default", "active", "admin", _now()])
+            """,
+                ["default", "Default Engagement", "Default", "active", "admin", _now()],
+            )
         except Exception:
             pass  # Default engagement already exists
 
@@ -142,6 +145,7 @@ def init_catalog() -> None:
 # ---------------------------------------------------------------------------
 # Upload CRUD
 # ---------------------------------------------------------------------------
+
 
 def create_upload(
     report_type: str,
@@ -185,7 +189,14 @@ def set_upload_ready(
         con.execute(
             "UPDATE uploads SET parquet_path=?, row_count=?, column_mapping=?, batch_id=?, ingested_at=?, status='ready' "
             "WHERE upload_id=?",
-            [str(parquet_path), row_count, json.dumps(column_mapping), batch_id, ingested_at, upload_id],
+            [
+                str(parquet_path),
+                row_count,
+                json.dumps(column_mapping),
+                batch_id,
+                ingested_at,
+                upload_id,
+            ],
         )
 
 
@@ -207,7 +218,7 @@ def store_upload_data(upload_id: str, parquet_path: Path) -> None:
 
 def get_upload_df(upload_id: str):
     """Return a Polars DataFrame for the upload's data from DuckDB."""
-    import polars as pl
+
     table = f"data_{upload_id.replace('-', '_')}"
     with _conn() as con:
         return con.execute(f"SELECT * FROM {table}").pl()
@@ -241,6 +252,7 @@ def get_upload(upload_id: str) -> dict | None:
 # Run CRUD
 # ---------------------------------------------------------------------------
 
+
 def create_run(upload_id: str) -> str:
     rid = str(uuid.uuid4())
     with _conn() as con:
@@ -252,7 +264,17 @@ def create_run(upload_id: str) -> str:
 
 
 def update_run(run_id: str, **kwargs: str | None) -> None:
-    allowed = {"status", "started_at", "finished_at", "wide_csv", "long_csv", "error", "workpaper_path", "progress_step", "progress_pct"}
+    allowed = {
+        "status",
+        "started_at",
+        "finished_at",
+        "wide_csv",
+        "long_csv",
+        "error",
+        "workpaper_path",
+        "progress_step",
+        "progress_pct",
+    }
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if not fields:
         return
@@ -289,6 +311,7 @@ def get_run(run_id: str) -> dict | None:
 # User CRUD
 # ---------------------------------------------------------------------------
 
+
 def create_user(username: str, password_hash: str, display_name: str) -> None:
     with _conn() as con:
         con.execute(
@@ -310,6 +333,7 @@ def get_user(username: str) -> dict | None:
 # Engagement CRUD
 # ---------------------------------------------------------------------------
 
+
 def create_engagement(
     name: str,
     client_name: str | None = None,
@@ -329,7 +353,9 @@ def create_engagement(
 
 def get_engagement(engagement_id: str) -> dict | None:
     with _conn() as con:
-        rows = con.execute("SELECT * FROM engagements WHERE engagement_id=?", [engagement_id]).fetchall()
+        rows = con.execute(
+            "SELECT * FROM engagements WHERE engagement_id=?", [engagement_id]
+        ).fetchall()
         if not rows:
             return None
         cols = [d[0] for d in con.description]
@@ -370,7 +396,15 @@ def save_mapping_profile(
             con.execute(
                 "INSERT INTO mapping_profiles (profile_id, report_type, header_signature, mapping_json, engagement_id, created_by, created_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                [profile_id, report_type, header_signature, mapping_json, engagement_id, created_by, _now()],
+                [
+                    profile_id,
+                    report_type,
+                    header_signature,
+                    mapping_json,
+                    engagement_id,
+                    created_by,
+                    _now(),
+                ],
             )
         except Exception:
             # Duplicate signature — update the mapping_json in place
@@ -435,6 +469,7 @@ def list_profiles(report_type: str, engagement_id: str | None = None) -> list[di
 # Settings CRUD
 # ---------------------------------------------------------------------------
 
+
 def get_setting(key: str) -> str | None:
     """Get a setting value by key."""
     with _conn() as con:
@@ -475,4 +510,4 @@ def init_settings() -> None:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()

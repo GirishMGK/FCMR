@@ -45,6 +45,7 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP"]
+ignore = ["E501"]  # line length enforced by black
 
 [tool.black]
 line-length = 100

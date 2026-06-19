@@ -59,9 +59,43 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 # State codes recognised by RTO for driving licences
 _DL_STATE_CODES = {
-    "AP", "AR", "AS", "BR", "CG", "GA", "GJ", "HR", "HP", "JH", "JK", "KA",
-    "KL", "LA", "LD", "MH", "ML", "MN", "MP", "MZ", "NL", "OD", "PB", "PY",
-    "RJ", "SK", "TN", "TS", "TR", "UK", "UP", "WB", "AN", "CH", "DD", "DL", "DN",
+    "AP",
+    "AR",
+    "AS",
+    "BR",
+    "CG",
+    "GA",
+    "GJ",
+    "HR",
+    "HP",
+    "JH",
+    "JK",
+    "KA",
+    "KL",
+    "LA",
+    "LD",
+    "MH",
+    "ML",
+    "MN",
+    "MP",
+    "MZ",
+    "NL",
+    "OD",
+    "PB",
+    "PY",
+    "RJ",
+    "SK",
+    "TN",
+    "TS",
+    "TR",
+    "UK",
+    "UP",
+    "WB",
+    "AN",
+    "CH",
+    "DD",
+    "DL",
+    "DN",
 }
 _DL_RE = re.compile(r"^([A-Z]{2})\d{2}\d{4}\d+$")
 
@@ -88,12 +122,16 @@ def _parse_dob(value: str) -> date | None:
     return None
 
 
-def _annotate(df: pl.DataFrame, rule_id: str, statuses: list[str], codes: list[str], descs: list[str]) -> pl.DataFrame:
-    return df.with_columns([
-        pl.Series(f"_exc_{rule_id}_status", statuses, dtype=pl.Utf8),
-        pl.Series(f"_exc_{rule_id}_code", codes, dtype=pl.Utf8),
-        pl.Series(f"_exc_{rule_id}_desc", descs, dtype=pl.Utf8),
-    ])
+def _annotate(
+    df: pl.DataFrame, rule_id: str, statuses: list[str], codes: list[str], descs: list[str]
+) -> pl.DataFrame:
+    return df.with_columns(
+        [
+            pl.Series(f"_exc_{rule_id}_status", statuses, dtype=pl.Utf8),
+            pl.Series(f"_exc_{rule_id}_code", codes, dtype=pl.Utf8),
+            pl.Series(f"_exc_{rule_id}_desc", descs, dtype=pl.Utf8),
+        ]
+    )
 
 
 def _col_or_empty(df: pl.DataFrame, col: str) -> pl.Series:
@@ -106,6 +144,7 @@ def _col_or_empty(df: pl.DataFrame, col: str) -> pl.Series:
 # PAN
 # ---------------------------------------------------------------------------
 
+
 @register("pan_format", "PAN number format validation (AAAAA9999A + entity type)")
 def rule_pan_format(df: pl.DataFrame) -> pl.DataFrame:
     pan_series = _col_or_empty(df, "pan")
@@ -113,21 +152,28 @@ def rule_pan_format(df: pl.DataFrame) -> pl.DataFrame:
     for pan in pan_series:
         pan = (pan or "").strip().upper()
         if not pan:
-            statuses.append("WARN"); codes.append("PAN_MISSING"); descs.append("PAN not provided")
+            statuses.append("WARN")
+            codes.append("PAN_MISSING")
+            descs.append("PAN not provided")
         elif not _PAN_RE.match(pan):
-            statuses.append("ERROR"); codes.append("PAN_INVALID_FORMAT")
+            statuses.append("ERROR")
+            codes.append("PAN_INVALID_FORMAT")
             descs.append(f"PAN '{pan}' does not match AAAAA9999A pattern")
         elif pan[3] not in _PAN_ENTITY_CHARS:
-            statuses.append("ERROR"); codes.append("PAN_INVALID_ENTITY_CHAR")
+            statuses.append("ERROR")
+            codes.append("PAN_INVALID_ENTITY_CHAR")
             descs.append(f"PAN '{pan}' has unrecognised entity type character '{pan[3]}'")
         else:
-            statuses.append("OK"); codes.append(""); descs.append("")
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")
     return _annotate(df, "pan_format", statuses, codes, descs)
 
 
 # ---------------------------------------------------------------------------
 # Aadhaar
 # ---------------------------------------------------------------------------
+
 
 @register("aadhaar_format", "Aadhaar format + Verhoeff checksum; output is always masked")
 def rule_aadhaar_format(df: pl.DataFrame) -> pl.DataFrame:
@@ -136,24 +182,32 @@ def rule_aadhaar_format(df: pl.DataFrame) -> pl.DataFrame:
     for raw in aadh_series:
         val = (raw or "").strip().replace(" ", "").replace("-", "")
         if not val:
-            statuses.append("WARN"); codes.append("AADHAAR_MISSING"); descs.append("Aadhaar not provided")
+            statuses.append("WARN")
+            codes.append("AADHAAR_MISSING")
+            descs.append("Aadhaar not provided")
         elif not val.isdigit() or len(val) != 12:
-            statuses.append("ERROR"); codes.append("AADHAAR_INVALID_FORMAT")
+            statuses.append("ERROR")
+            codes.append("AADHAAR_INVALID_FORMAT")
             descs.append("Aadhaar must be exactly 12 digits")
         elif val[0] in "01":
-            statuses.append("ERROR"); codes.append("AADHAAR_INVALID_PREFIX")
+            statuses.append("ERROR")
+            codes.append("AADHAAR_INVALID_PREFIX")
             descs.append("Aadhaar cannot start with 0 or 1")
         elif not _verhoeff_valid(val):
-            statuses.append("ERROR"); codes.append("AADHAAR_CHECKSUM_FAIL")
+            statuses.append("ERROR")
+            codes.append("AADHAAR_CHECKSUM_FAIL")
             descs.append("Aadhaar Verhoeff checksum validation failed")
         else:
-            statuses.append("OK"); codes.append(""); descs.append("")
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")
     return _annotate(df, "aadhaar_format", statuses, codes, descs)
 
 
 # ---------------------------------------------------------------------------
 # Voter ID (EPIC)
 # ---------------------------------------------------------------------------
+
 
 @register("voter_id_format", "Voter ID (EPIC) format: 3 letters + 7 digits")
 def rule_voter_id_format(df: pl.DataFrame) -> pl.DataFrame:
@@ -162,18 +216,24 @@ def rule_voter_id_format(df: pl.DataFrame) -> pl.DataFrame:
     for val in series:
         val = (val or "").strip().upper()
         if not val:
-            statuses.append("WARN"); codes.append("VOTER_ID_MISSING"); descs.append("Voter ID not provided")
+            statuses.append("WARN")
+            codes.append("VOTER_ID_MISSING")
+            descs.append("Voter ID not provided")
         elif not _EPIC_RE.match(val):
-            statuses.append("ERROR"); codes.append("VOTER_ID_INVALID_FORMAT")
+            statuses.append("ERROR")
+            codes.append("VOTER_ID_INVALID_FORMAT")
             descs.append(f"Voter ID '{val}' must match pattern AAA9999999 (3 letters + 7 digits)")
         else:
-            statuses.append("OK"); codes.append(""); descs.append("")
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")
     return _annotate(df, "voter_id_format", statuses, codes, descs)
 
 
 # ---------------------------------------------------------------------------
 # Passport
 # ---------------------------------------------------------------------------
+
 
 @register("passport_format", "Indian passport format: letter (not Q/X/Z) + 7 digits")
 def rule_passport_format(df: pl.DataFrame) -> pl.DataFrame:
@@ -182,18 +242,24 @@ def rule_passport_format(df: pl.DataFrame) -> pl.DataFrame:
     for val in series:
         val = (val or "").strip().upper()
         if not val:
-            statuses.append("OK"); codes.append(""); descs.append("")  # passport is optional
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")  # passport is optional
         elif not _PASSPORT_RE.match(val):
-            statuses.append("ERROR"); codes.append("PASSPORT_INVALID_FORMAT")
+            statuses.append("ERROR")
+            codes.append("PASSPORT_INVALID_FORMAT")
             descs.append(f"Passport '{val}' must be 1 letter (A-PR-WY) followed by 7 digits")
         else:
-            statuses.append("OK"); codes.append(""); descs.append("")
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")
     return _annotate(df, "passport_format", statuses, codes, descs)
 
 
 # ---------------------------------------------------------------------------
 # Driving Licence
 # ---------------------------------------------------------------------------
+
 
 @register("dl_format", "Driving licence: state code + RTO + year + sequence")
 def rule_dl_format(df: pl.DataFrame) -> pl.DataFrame:
@@ -202,23 +268,30 @@ def rule_dl_format(df: pl.DataFrame) -> pl.DataFrame:
     for val in series:
         val = (val or "").strip().upper().replace("-", "").replace(" ", "")
         if not val:
-            statuses.append("OK"); codes.append(""); descs.append("")  # DL is optional
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")  # DL is optional
             continue
         m = _DL_RE.match(val)
         if not m:
-            statuses.append("ERROR"); codes.append("DL_INVALID_FORMAT")
+            statuses.append("ERROR")
+            codes.append("DL_INVALID_FORMAT")
             descs.append(f"DL '{val}' does not match expected pattern (SSRRYYYYNNNNNNN)")
         elif m.group(1) not in _DL_STATE_CODES:
-            statuses.append("ERROR"); codes.append("DL_INVALID_STATE_CODE")
+            statuses.append("ERROR")
+            codes.append("DL_INVALID_STATE_CODE")
             descs.append(f"DL '{val}' has unrecognised state code '{m.group(1)}'")
         else:
-            statuses.append("OK"); codes.append(""); descs.append("")
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")
     return _annotate(df, "dl_format", statuses, codes, descs)
 
 
 # ---------------------------------------------------------------------------
 # Mobile
 # ---------------------------------------------------------------------------
+
 
 @register("mobile_format", "Mobile number: 10 digits starting 6-9")
 def rule_mobile_format(df: pl.DataFrame) -> pl.DataFrame:
@@ -229,18 +302,24 @@ def rule_mobile_format(df: pl.DataFrame) -> pl.DataFrame:
         if val.startswith("+91"):
             val = val[3:]
         if not val:
-            statuses.append("WARN"); codes.append("MOBILE_MISSING"); descs.append("Mobile number not provided")
+            statuses.append("WARN")
+            codes.append("MOBILE_MISSING")
+            descs.append("Mobile number not provided")
         elif not _MOBILE_RE.match(val):
-            statuses.append("ERROR"); codes.append("MOBILE_INVALID_FORMAT")
+            statuses.append("ERROR")
+            codes.append("MOBILE_INVALID_FORMAT")
             descs.append(f"Mobile '{val}' must be 10 digits starting with 6-9")
         else:
-            statuses.append("OK"); codes.append(""); descs.append("")
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")
     return _annotate(df, "mobile_format", statuses, codes, descs)
 
 
 # ---------------------------------------------------------------------------
 # Email
 # ---------------------------------------------------------------------------
+
 
 @register("email_format", "Email address basic format validation")
 def rule_email_format(df: pl.DataFrame) -> pl.DataFrame:
@@ -249,18 +328,24 @@ def rule_email_format(df: pl.DataFrame) -> pl.DataFrame:
     for val in series:
         val = (val or "").strip()
         if not val:
-            statuses.append("WARN"); codes.append("EMAIL_MISSING"); descs.append("Email not provided")
+            statuses.append("WARN")
+            codes.append("EMAIL_MISSING")
+            descs.append("Email not provided")
         elif not _EMAIL_RE.match(val):
-            statuses.append("ERROR"); codes.append("EMAIL_INVALID_FORMAT")
+            statuses.append("ERROR")
+            codes.append("EMAIL_INVALID_FORMAT")
             descs.append(f"Email '{val}' is not a valid email address format")
         else:
-            statuses.append("OK"); codes.append(""); descs.append("")
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")
     return _annotate(df, "email_format", statuses, codes, descs)
 
 
 # ---------------------------------------------------------------------------
 # Date of Birth
 # ---------------------------------------------------------------------------
+
 
 @register("dob_validity", "Date of birth: valid date, age 1â€“100 years")
 def rule_dob_validity(df: pl.DataFrame) -> pl.DataFrame:
@@ -270,25 +355,33 @@ def rule_dob_validity(df: pl.DataFrame) -> pl.DataFrame:
     for val in series:
         val = (val or "").strip()
         if not val:
-            statuses.append("WARN"); codes.append("DOB_MISSING"); descs.append("Date of birth not provided")
+            statuses.append("WARN")
+            codes.append("DOB_MISSING")
+            descs.append("Date of birth not provided")
             continue
         parsed = _parse_dob(val)
         if parsed is None:
-            statuses.append("ERROR"); codes.append("DOB_INVALID_FORMAT")
+            statuses.append("ERROR")
+            codes.append("DOB_INVALID_FORMAT")
             descs.append(f"DOB '{val}' could not be parsed; expected YYYY-MM-DD or DD-MM-YYYY")
         elif parsed >= today:
-            statuses.append("ERROR"); codes.append("DOB_FUTURE_DATE")
+            statuses.append("ERROR")
+            codes.append("DOB_FUTURE_DATE")
             descs.append(f"DOB '{val}' is a future date")
         else:
             age = (today - parsed).days // 365
             if age > 100:
-                statuses.append("ERROR"); codes.append("DOB_AGE_IMPLAUSIBLE")
+                statuses.append("ERROR")
+                codes.append("DOB_AGE_IMPLAUSIBLE")
                 descs.append(f"DOB '{val}' implies age {age} years, which is implausible")
             elif age < 1:
-                statuses.append("ERROR"); codes.append("DOB_AGE_TOO_YOUNG")
+                statuses.append("ERROR")
+                codes.append("DOB_AGE_TOO_YOUNG")
                 descs.append(f"DOB '{val}' implies age less than 1 year")
             else:
-                statuses.append("OK"); codes.append(""); descs.append("")
+                statuses.append("OK")
+                codes.append("")
+                descs.append("")
     return _annotate(df, "dob_validity", statuses, codes, descs)
 
 
@@ -300,19 +393,27 @@ def rule_dob_age_range(df: pl.DataFrame) -> pl.DataFrame:
     for val in series:
         val = (val or "").strip()
         if not val:
-            statuses.append("OK"); codes.append(""); descs.append("")  # Missing DOB handled by dob_validity
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")  # Missing DOB handled by dob_validity
             continue
         parsed = _parse_dob(val)
         if parsed is None or parsed >= today:
-            statuses.append("OK"); codes.append(""); descs.append("")  # Invalid/future DOB handled by dob_validity
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")  # Invalid/future DOB handled by dob_validity
             continue
         age = (today - parsed).days // 365
         if age < 18:
-            statuses.append("WARN"); codes.append("DOB_AGE_OUT_OF_RANGE")
+            statuses.append("WARN")
+            codes.append("DOB_AGE_OUT_OF_RANGE")
             descs.append(f"Age {age} years is below 18 (minimum lending age)")
         elif age > 65:
-            statuses.append("WARN"); codes.append("DOB_AGE_OUT_OF_RANGE")
+            statuses.append("WARN")
+            codes.append("DOB_AGE_OUT_OF_RANGE")
             descs.append(f"Age {age} years is above 65 (standard retirement age)")
         else:
-            statuses.append("OK"); codes.append(""); descs.append("")
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")
     return _annotate(df, "dob_age_range", statuses, codes, descs)

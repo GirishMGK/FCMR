@@ -10,25 +10,21 @@ from pathlib import Path
 
 import polars as pl
 
-
 # Exception severity mapping
 _SEVERITY_MAP = {
     # CRITICAL: UCID, PAN/Aadhaar duplicates (identity fraud risk)
     "UCID_KYC_INCONSISTENT": "CRITICAL",
     "PAN_DUPLICATE": "CRITICAL",
     "AADHAAR_DUPLICATE": "CRITICAL",
-
     # HIGH: Voter ID, Address, Bank Account duplicates (fraud indicators)
     "VOTER_ID_DUPLICATE": "HIGH",
     "ADDRESS_DUPLICATE": "HIGH",
     "BANK_ACCOUNT_DUPLICATE": "HIGH",
     "NAME_DOB_DUPLICATE": "HIGH",
-
     # MEDIUM: Email domain, age range, account length (data quality)
     "EMAIL_COMPANY_GENERIC_DOMAIN": "MEDIUM",
     "DOB_AGE_OUT_OF_RANGE": "MEDIUM",
     "BANK_ACCOUNT_INVALID_LENGTH": "MEDIUM",
-
     # LOW: PIN/address mismatches (lower audit impact)
     "PINCODE_MISMATCH": "LOW",
     "DISTRICT_PIN_MISMATCH": "LOW",

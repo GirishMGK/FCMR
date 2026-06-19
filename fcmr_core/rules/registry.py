@@ -15,9 +15,8 @@ wide and long CSVs.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Callable
+from collections.abc import Callable
+from dataclasses import dataclass
 
 import polars as pl
 
@@ -71,10 +70,12 @@ def _ensure_rules_loaded() -> None:
     if _REGISTRY:
         return
     # Import triggers registration via @register decorators
-    from fcmr_core.rules import ucid  # noqa: F401
-    from fcmr_core.rules import kyc_format  # noqa: F401
-    from fcmr_core.rules import pincode_address  # noqa: F401
-    from fcmr_core.rules import duplicates  # noqa: F401
-    from fcmr_core.rules import email  # noqa: F401
-    from fcmr_core.rules import bank_account  # noqa: F401
-    from fcmr_core.rules import beneficiary  # noqa: F401
+    from fcmr_core.rules import (
+        bank_account,  # noqa: F401
+        beneficiary,  # noqa: F401
+        duplicates,  # noqa: F401
+        email,  # noqa: F401
+        kyc_format,  # noqa: F401
+        pincode_address,  # noqa: F401
+        ucid,  # noqa: F401
+    )

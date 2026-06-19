@@ -1,11 +1,9 @@
 """Unit tests for PIN code and address validation rules."""
 
 import polars as pl
-import pytest
 
 from fcmr_core.rules.pincode_address import (
     rule_address_completeness,
-    rule_district_pin_match,
     rule_pincode_exists,
     rule_state_pin_match,
 )
@@ -67,22 +65,34 @@ class TestStatePinMatch:
 
 class TestAddressCompleteness:
     def test_all_fields_present(self):
-        df = rule_address_completeness(_df(
-            address_line1="123 Main St", city="Mumbai",
-            state="Maharashtra", pincode="400001",
-        ))
+        df = rule_address_completeness(
+            _df(
+                address_line1="123 Main St",
+                city="Mumbai",
+                state="Maharashtra",
+                pincode="400001",
+            )
+        )
         assert _status(df, "address_completeness") == "OK"
 
     def test_missing_pincode(self):
-        df = rule_address_completeness(_df(
-            address_line1="123 Main St", city="Mumbai",
-            state="Maharashtra", pincode="",
-        ))
+        df = rule_address_completeness(
+            _df(
+                address_line1="123 Main St",
+                city="Mumbai",
+                state="Maharashtra",
+                pincode="",
+            )
+        )
         assert _code(df, "address_completeness") == "ADDRESS_INCOMPLETE"
 
     def test_missing_multiple_fields(self):
-        df = rule_address_completeness(_df(
-            address_line1="", city="",
-            state="Maharashtra", pincode="400001",
-        ))
+        df = rule_address_completeness(
+            _df(
+                address_line1="",
+                city="",
+                state="Maharashtra",
+                pincode="400001",
+            )
+        )
         assert _code(df, "address_completeness") == "ADDRESS_INCOMPLETE"

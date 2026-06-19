@@ -36,9 +36,7 @@ def aggregate_status_counts(wide_csv_path: Path) -> dict[str, int]:
         return {"OK": 0, "WARN": 0, "ERROR": 0}
 
 
-def aggregate_exception_codes(
-    wide_csv_path: Path, top_n: int | None = 10
-) -> dict[str, int]:
+def aggregate_exception_codes(wide_csv_path: Path, top_n: int | None = 10) -> dict[str, int]:
     """Count top N exception codes from exception_codes column (pipe-delimited).
 
     Args:

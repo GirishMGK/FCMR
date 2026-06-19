@@ -33,6 +33,8 @@ _cancel_requests: set[str] = set()
 
 class _RunCancelled(Exception):
     """Raised by the on_progress callback when a cancel is requested mid-pipeline."""
+
+
 _templates_dir = Path(__file__).parent.parent / "web" / "templates"
 templates = Jinja2Templates(directory=str(_templates_dir))
 
@@ -69,12 +71,14 @@ async def run_status(run_id: str):
     run = store.get_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
-    return JSONResponse({
-        "status": run["status"],
-        "progress_step": run.get("progress_step") or "",
-        "progress_pct": run.get("progress_pct") or 0,
-        "error": run.get("error") or "",
-    })
+    return JSONResponse(
+        {
+            "status": run["status"],
+            "progress_step": run.get("progress_step") or "",
+            "progress_pct": run.get("progress_pct") or 0,
+            "error": run.get("error") or "",
+        }
+    )
 
 
 def _run_analytics(run_id: str, upload_id: str) -> None:
@@ -105,7 +109,8 @@ def _run_analytics(run_id: str, upload_id: str) -> None:
         if available_gb < 2.0:
             logger.warning(
                 "low_ram run_id=%s available_gb=%.1f — processing will rely on DuckDB disk spill",
-                run_id, available_gb,
+                run_id,
+                available_gb,
             )
 
         # Data lives in DuckDB after ingestion; parquet is deleted post-import.
@@ -115,16 +120,13 @@ def _run_analytics(run_id: str, upload_id: str) -> None:
             parquet_path = Path(upload["parquet_path"])
             if not parquet_path.exists():
                 raise FileNotFoundError(
-                    f"Data file not found at {parquet_path}. "
-                    "Please re-upload the CSV file."
+                    f"Data file not found at {parquet_path}. " "Please re-upload the CSV file."
                 )
             df = read_parquet(parquet_path).collect()
 
         # Cast every column to string up-front. DuckDB infers numeric-looking
         # fields (mobile, pincode, bank_account) as Int64; all rules expect str.
-        df = df.with_columns([
-            pl.col(c).cast(pl.Utf8, strict=False) for c in df.columns
-        ])
+        df = df.with_columns([pl.col(c).cast(pl.Utf8, strict=False) for c in df.columns])
         logger.info("job_loaded run_id=%s rows=%d", run_id, len(df))
 
         store.update_run(run_id, progress_step="Starting validation rules…", progress_pct=5)
@@ -194,7 +196,8 @@ async def run_detail(request: Request, run_id: str):
             }
 
     return templates.TemplateResponse(
-        request=request, name="run_detail.html",
+        request=request,
+        name="run_detail.html",
         context={
             "run": run,
             "summary": summary,

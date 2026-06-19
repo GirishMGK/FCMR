@@ -9,10 +9,10 @@ from typing import Any
 
 import yaml
 
-from fcmr_core.config import settings as config_settings
 from fcmr_core.catalog import store as catalog_store
+from fcmr_core.config import settings as config_settings
 
-_REGISTRY: dict[str, "SchemaMap"] = {}
+_REGISTRY: dict[str, SchemaMap] = {}
 
 
 @dataclass
@@ -66,7 +66,9 @@ class SchemaMap:
         # Load threshold from database (or config default)
         threshold_str = catalog_store.get_setting("fuzzy_match_threshold")
         try:
-            threshold = float(threshold_str) if threshold_str else config_settings.fuzzy_match_threshold
+            threshold = (
+                float(threshold_str) if threshold_str else config_settings.fuzzy_match_threshold
+            )
         except (ValueError, TypeError):
             threshold = config_settings.fuzzy_match_threshold
 
@@ -87,7 +89,9 @@ class SchemaMap:
 
     def missing_required(self, mapped: dict[str, str]) -> list[str]:
         found_canonicals = set(mapped.values())
-        return [c.canonical for c in self.columns if c.required and c.canonical not in found_canonicals]
+        return [
+            c.canonical for c in self.columns if c.required and c.canonical not in found_canonicals
+        ]
 
     def dtype_for(self, canonical: str) -> str:
         for col in self.columns:

@@ -43,6 +43,7 @@ app = FastAPI(
 # Ensure catalog + admin user exist — idempotent, safe to call on every cold start
 _initialized = False
 
+
 def _ensure_initialized() -> None:
     global _initialized
     if not _initialized:
@@ -66,6 +67,7 @@ class LoginRequiredMiddleware(BaseHTTPMiddleware):
         if "username" not in request.session:
             return RedirectResponse(url="/login", status_code=303)
         return await call_next(request)
+
 
 # Add middlewares in reverse order (last added = innermost = runs first)
 app.add_middleware(LoginRequiredMiddleware)

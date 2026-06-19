@@ -19,23 +19,25 @@ async def get_system_info():
         cpu_count = psutil.cpu_count(logical=True)
         cpu_freq = psutil.cpu_freq()
 
-        return JSONResponse({
-            "hardware": {
-                "tier": settings.hw_tier,
-                "total_ram_gb": round(vm.total / 1024**3, 1),
-                "cpu_cores": cpu_count,
-                "cpu_freq_ghz": round(cpu_freq.current / 1000, 2) if cpu_freq else None,
-            },
-            "duckdb": {
-                "memory_limit": settings.duckdb_memory_limit,
-                "threads": settings.duckdb_threads,
-                "temp_directory": str(settings.data_dir / "duckdb_spill"),
-            },
-            "paths": {
-                "data_dir": str(settings.data_dir),
-                "logs_dir": str(settings.logs_dir),
-            },
-        })
+        return JSONResponse(
+            {
+                "hardware": {
+                    "tier": settings.hw_tier,
+                    "total_ram_gb": round(vm.total / 1024**3, 1),
+                    "cpu_cores": cpu_count,
+                    "cpu_freq_ghz": round(cpu_freq.current / 1000, 2) if cpu_freq else None,
+                },
+                "duckdb": {
+                    "memory_limit": settings.duckdb_memory_limit,
+                    "threads": settings.duckdb_threads,
+                    "temp_directory": str(settings.data_dir / "duckdb_spill"),
+                },
+                "paths": {
+                    "data_dir": str(settings.data_dir),
+                    "logs_dir": str(settings.logs_dir),
+                },
+            }
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -58,19 +60,21 @@ async def get_resource_usage():
             except Exception:
                 pass
 
-        return JSONResponse({
-            "ram": {
-                "total_gb": round(vm.total / 1024**3, 1),
-                "used_gb": round(vm.used / 1024**3, 1),
-                "available_gb": round(vm.available / 1024**3, 1),
-                "percent": vm.percent,
-            },
-            "cpu": {
-                "percent": cpu_percent,
-                "count": psutil.cpu_count(logical=True),
-            },
-            "disk_spill_mb": spill_size_mb,
-        })
+        return JSONResponse(
+            {
+                "ram": {
+                    "total_gb": round(vm.total / 1024**3, 1),
+                    "used_gb": round(vm.used / 1024**3, 1),
+                    "available_gb": round(vm.available / 1024**3, 1),
+                    "percent": vm.percent,
+                },
+                "cpu": {
+                    "percent": cpu_percent,
+                    "count": psutil.cpu_count(logical=True),
+                },
+                "disk_spill_mb": spill_size_mb,
+            }
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -88,9 +92,11 @@ async def get_recent_logs(lines: int = 100):
 
         # Return the last N lines
         recent = all_lines[-lines:] if len(all_lines) > lines else all_lines
-        return JSONResponse({
-            "logs": [line.rstrip() for line in recent],
-            "total_lines": len(all_lines),
-        })
+        return JSONResponse(
+            {
+                "logs": [line.rstrip() for line in recent],
+                "total_lines": len(all_lines),
+            }
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

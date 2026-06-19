@@ -29,12 +29,16 @@ def _col_or_empty(df: pl.DataFrame, col: str) -> pl.Series:
     return pl.Series(col, [""] * len(df), dtype=pl.Utf8)
 
 
-def _annotate(df: pl.DataFrame, rule_id: str, statuses: list[str], codes: list[str], descs: list[str]) -> pl.DataFrame:
-    return df.with_columns([
-        pl.Series(f"_exc_{rule_id}_status", statuses, dtype=pl.Utf8),
-        pl.Series(f"_exc_{rule_id}_code", codes, dtype=pl.Utf8),
-        pl.Series(f"_exc_{rule_id}_desc", descs, dtype=pl.Utf8),
-    ])
+def _annotate(
+    df: pl.DataFrame, rule_id: str, statuses: list[str], codes: list[str], descs: list[str]
+) -> pl.DataFrame:
+    return df.with_columns(
+        [
+            pl.Series(f"_exc_{rule_id}_status", statuses, dtype=pl.Utf8),
+            pl.Series(f"_exc_{rule_id}_code", codes, dtype=pl.Utf8),
+            pl.Series(f"_exc_{rule_id}_desc", descs, dtype=pl.Utf8),
+        ]
+    )
 
 
 def _hash_aadhaar(raw: str) -> str:
@@ -64,7 +68,9 @@ def _address_similarity(a1: str, a2: str) -> float:
     return intersection / union if union > 0 else 0.0
 
 
-def _find_duplicates_duckdb(df: pl.DataFrame, key_col: str, id_col: str, ucid_col: str = None, lan_col: str = None) -> dict[str, list[tuple[str, str, str]]]:
+def _find_duplicates_duckdb(
+    df: pl.DataFrame, key_col: str, id_col: str, ucid_col: str = None, lan_col: str = None
+) -> dict[str, list[tuple[str, str, str]]]:
     """Find duplicates with optional UCID + LAN context.
 
     Returns {key_value: [(id, ucid, lan), ...]} for keys appearing > once.
@@ -113,7 +119,7 @@ def _find_duplicates_duckdb(df: pl.DataFrame, key_col: str, id_col: str, ucid_co
 
 def _is_allowed_duplicate(cid: str, key: str, dupes: dict, ucid: str = "", lan: str = "") -> bool:
     """Check if this duplicate is allowed (same UCID + different LANs)."""
-    if not ucid or not (ucid in [d[1] for d in dupes.get(key, [])]):
+    if not ucid or ucid not in [d[1] for d in dupes.get(key, [])]:
         # Different UCID or no UCID info -> flag it
         return False
     # Same UCID: check if all duplicates have different LANs
@@ -126,7 +132,10 @@ def _is_allowed_duplicate(cid: str, key: str, dupes: dict, ucid: str = "", lan: 
     return len(set(lans)) == len(lans)
 
 
-@register("pan_duplicate", "Shared PAN across different customer IDs (flagged unless same UCID + different LANs)")
+@register(
+    "pan_duplicate",
+    "Shared PAN across different customer IDs (flagged unless same UCID + different LANs)",
+)
 def rule_pan_duplicate(df: pl.DataFrame) -> pl.DataFrame:
     work = df.with_columns(
         pl.col("pan").fill_null("").str.strip_chars().str.to_uppercase().alias("_pan_norm")
@@ -143,7 +152,9 @@ def rule_pan_duplicate(df: pl.DataFrame) -> pl.DataFrame:
     if lan_col:
         work_select.append(lan_col)
 
-    dupes = _find_duplicates_duckdb(work.select(work_select), "_pan_norm", cid_col, ucid_col, lan_col)
+    dupes = _find_duplicates_duckdb(
+        work.select(work_select), "_pan_norm", cid_col, ucid_col, lan_col
+    )
 
     cids = _col_or_empty(df, "customer_id")
     pans = work["_pan_norm"]
@@ -155,17 +166,25 @@ def rule_pan_duplicate(df: pl.DataFrame) -> pl.DataFrame:
         pan = (pan or "").strip()
         if pan and pan in dupes:
             if _is_allowed_duplicate(cid, pan, dupes, ucid, lan):
-                statuses.append("OK"); codes.append(""); descs.append("")
+                statuses.append("OK")
+                codes.append("")
+                descs.append("")
             else:
                 others = [d[0] for d in dupes[pan] if d[0] != cid]
-                statuses.append("ERROR"); codes.append("PAN_DUPLICATE")
+                statuses.append("ERROR")
+                codes.append("PAN_DUPLICATE")
                 descs.append(f"PAN '{pan}' is shared with customer(s): {', '.join(others[:5])}")
         else:
-            statuses.append("OK"); codes.append(""); descs.append("")
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")
     return _annotate(df, "pan_duplicate", statuses, codes, descs)
 
 
-@register("aadhaar_duplicate", "Shared Aadhaar (hash-based) across different customer IDs (flagged unless same UCID + different LANs)")
+@register(
+    "aadhaar_duplicate",
+    "Shared Aadhaar (hash-based) across different customer IDs (flagged unless same UCID + different LANs)",
+)
 def rule_aadhaar_duplicate(df: pl.DataFrame) -> pl.DataFrame:
     aadh_series = _col_or_empty(df, "aadhaar")
     cids = _col_or_empty(df, "customer_id")
@@ -180,23 +199,39 @@ def rule_aadhaar_duplicate(df: pl.DataFrame) -> pl.DataFrame:
         work_data["lan"] = lans
 
     work = pl.DataFrame(work_data)
-    dupes = _find_duplicates_duckdb(work, "_aadhaar_hash", "customer_id", "ucid" if "ucid" in df.columns else None, "lan" if "lan" in df.columns else None)
+    dupes = _find_duplicates_duckdb(
+        work,
+        "_aadhaar_hash",
+        "customer_id",
+        "ucid" if "ucid" in df.columns else None,
+        "lan" if "lan" in df.columns else None,
+    )
 
     statuses, codes, descs = [], [], []
     for cid, h, ucid, lan in zip(cids, hashes, ucids, lans):
         if h and h in dupes:
             if _is_allowed_duplicate(cid, h, dupes, ucid, lan):
-                statuses.append("OK"); codes.append(""); descs.append("")
+                statuses.append("OK")
+                codes.append("")
+                descs.append("")
             else:
                 others = [d[0] for d in dupes[h] if d[0] != cid]
-                statuses.append("ERROR"); codes.append("AADHAAR_DUPLICATE")
-                descs.append(f"Aadhaar (masked) is shared with customer(s): {', '.join(others[:5])}")
+                statuses.append("ERROR")
+                codes.append("AADHAAR_DUPLICATE")
+                descs.append(
+                    f"Aadhaar (masked) is shared with customer(s): {', '.join(others[:5])}"
+                )
         else:
-            statuses.append("OK"); codes.append(""); descs.append("")
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")
     return _annotate(df, "aadhaar_duplicate", statuses, codes, descs)
 
 
-@register("mobile_duplicate", "Shared mobile number across different customer IDs (flagged unless same UCID + different LANs)")
+@register(
+    "mobile_duplicate",
+    "Shared mobile number across different customer IDs (flagged unless same UCID + different LANs)",
+)
 def rule_mobile_duplicate(df: pl.DataFrame) -> pl.DataFrame:
     mobiles = _col_or_empty(df, "mobile")
     cids = _col_or_empty(df, "customer_id")
@@ -212,23 +247,37 @@ def rule_mobile_duplicate(df: pl.DataFrame) -> pl.DataFrame:
         work_data["lan"] = lans
 
     work = pl.DataFrame(work_data)
-    dupes = _find_duplicates_duckdb(work, "_mobile_norm", "customer_id", "ucid" if "ucid" in df.columns else None, "lan" if "lan" in df.columns else None)
+    dupes = _find_duplicates_duckdb(
+        work,
+        "_mobile_norm",
+        "customer_id",
+        "ucid" if "ucid" in df.columns else None,
+        "lan" if "lan" in df.columns else None,
+    )
 
     statuses, codes, descs = [], [], []
     for cid, mob, ucid, lan in zip(cids, norm_mobiles, ucids, lans):
         if mob and mob in dupes:
             if _is_allowed_duplicate(cid, mob, dupes, ucid, lan):
-                statuses.append("OK"); codes.append(""); descs.append("")
+                statuses.append("OK")
+                codes.append("")
+                descs.append("")
             else:
                 others = [d[0] for d in dupes[mob] if d[0] != cid]
-                statuses.append("ERROR"); codes.append("MOBILE_DUPLICATE")
+                statuses.append("ERROR")
+                codes.append("MOBILE_DUPLICATE")
                 descs.append(f"Mobile '{mob}' is shared with customer(s): {', '.join(others[:5])}")
         else:
-            statuses.append("OK"); codes.append(""); descs.append("")
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")
     return _annotate(df, "mobile_duplicate", statuses, codes, descs)
 
 
-@register("bank_account_duplicate", "Shared bank account number across different customer IDs (flagged unless same UCID + different LANs)")
+@register(
+    "bank_account_duplicate",
+    "Shared bank account number across different customer IDs (flagged unless same UCID + different LANs)",
+)
 def rule_bank_account_duplicate(df: pl.DataFrame) -> pl.DataFrame:
     accts = _col_or_empty(df, "bank_account")
     cids = _col_or_empty(df, "customer_id")
@@ -242,24 +291,40 @@ def rule_bank_account_duplicate(df: pl.DataFrame) -> pl.DataFrame:
         work_data["lan"] = lans
 
     work = pl.DataFrame(work_data)
-    dupes = _find_duplicates_duckdb(work, "_acct", "customer_id", "ucid" if "ucid" in df.columns else None, "lan" if "lan" in df.columns else None)
+    dupes = _find_duplicates_duckdb(
+        work,
+        "_acct",
+        "customer_id",
+        "ucid" if "ucid" in df.columns else None,
+        "lan" if "lan" in df.columns else None,
+    )
 
     statuses, codes, descs = [], [], []
     for cid, acct, ucid, lan in zip(cids, accts, ucids, lans):
         acct = (acct or "").strip()
         if acct and acct in dupes:
             if _is_allowed_duplicate(cid, acct, dupes, ucid, lan):
-                statuses.append("OK"); codes.append(""); descs.append("")
+                statuses.append("OK")
+                codes.append("")
+                descs.append("")
             else:
                 others = [d[0] for d in dupes[acct] if d[0] != cid]
-                statuses.append("ERROR"); codes.append("BANK_ACCOUNT_DUPLICATE")
-                descs.append(f"Bank account '{acct}' is shared with customer(s): {', '.join(others[:5])}")
+                statuses.append("ERROR")
+                codes.append("BANK_ACCOUNT_DUPLICATE")
+                descs.append(
+                    f"Bank account '{acct}' is shared with customer(s): {', '.join(others[:5])}"
+                )
         else:
-            statuses.append("OK"); codes.append(""); descs.append("")
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")
     return _annotate(df, "bank_account_duplicate", statuses, codes, descs)
 
 
-@register("name_dob_duplicate", "Exact name+DOB duplicate (normalised) across different customer IDs (flagged unless same UCID + different LANs)")
+@register(
+    "name_dob_duplicate",
+    "Exact name+DOB duplicate (normalised) across different customer IDs (flagged unless same UCID + different LANs)",
+)
 def rule_name_dob_duplicate(df: pl.DataFrame) -> pl.DataFrame:
     names = _col_or_empty(df, "full_name")
     dobs = _col_or_empty(df, "dob")
@@ -268,7 +333,11 @@ def rule_name_dob_duplicate(df: pl.DataFrame) -> pl.DataFrame:
     lans = _col_or_empty(df, "lan") if "lan" in df.columns else pl.Series("lan", [""] * len(df))
 
     keys = [
-        ((n or "").strip().upper() + "|" + (d or "").strip()) if ((n or "").strip() and (d or "").strip()) else ""
+        (
+            ((n or "").strip().upper() + "|" + (d or "").strip())
+            if ((n or "").strip() and (d or "").strip())
+            else ""
+        )
         for n, d in zip(names, dobs)
     ]
 
@@ -279,26 +348,40 @@ def rule_name_dob_duplicate(df: pl.DataFrame) -> pl.DataFrame:
         work_data["lan"] = lans
 
     work = pl.DataFrame(work_data)
-    dupes = _find_duplicates_duckdb(work, "_name_dob", "customer_id", "ucid" if "ucid" in df.columns else None, "lan" if "lan" in df.columns else None)
+    dupes = _find_duplicates_duckdb(
+        work,
+        "_name_dob",
+        "customer_id",
+        "ucid" if "ucid" in df.columns else None,
+        "lan" if "lan" in df.columns else None,
+    )
 
     statuses, codes, descs = [], [], []
     for cid, key, ucid, lan in zip(cids, keys, ucids, lans):
         if key and key in dupes:
             if _is_allowed_duplicate(cid, key, dupes, ucid, lan):
-                statuses.append("OK"); codes.append(""); descs.append("")
+                statuses.append("OK")
+                codes.append("")
+                descs.append("")
             else:
                 others = [d[0] for d in dupes[key] if d[0] != cid]
                 name, dob = key.split("|", 1)
-                statuses.append("ERROR"); codes.append("NAME_DOB_DUPLICATE")
+                statuses.append("ERROR")
+                codes.append("NAME_DOB_DUPLICATE")
                 descs.append(
                     f"Name+DOB combination '{name} / {dob}' matches customer(s): {', '.join(others[:5])}"
                 )
         else:
-            statuses.append("OK"); codes.append(""); descs.append("")
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")
     return _annotate(df, "name_dob_duplicate", statuses, codes, descs)
 
 
-@register("voter_id_duplicate", "Shared Voter ID across different customer IDs (flagged unless same UCID + different LANs)")
+@register(
+    "voter_id_duplicate",
+    "Shared Voter ID across different customer IDs (flagged unless same UCID + different LANs)",
+)
 def rule_voter_id_duplicate(df: pl.DataFrame) -> pl.DataFrame:
     vids = _col_or_empty(df, "voter_id")
     cids = _col_or_empty(df, "customer_id")
@@ -314,23 +397,39 @@ def rule_voter_id_duplicate(df: pl.DataFrame) -> pl.DataFrame:
         work_data["lan"] = lans
 
     work = pl.DataFrame(work_data)
-    dupes = _find_duplicates_duckdb(work, "_voter_id", "customer_id", "ucid" if "ucid" in df.columns else None, "lan" if "lan" in df.columns else None)
+    dupes = _find_duplicates_duckdb(
+        work,
+        "_voter_id",
+        "customer_id",
+        "ucid" if "ucid" in df.columns else None,
+        "lan" if "lan" in df.columns else None,
+    )
 
     statuses, codes, descs = [], [], []
     for cid, vid, ucid, lan in zip(cids, norm_vids, ucids, lans):
         if vid and vid in dupes:
             if _is_allowed_duplicate(cid, vid, dupes, ucid, lan):
-                statuses.append("OK"); codes.append(""); descs.append("")
+                statuses.append("OK")
+                codes.append("")
+                descs.append("")
             else:
                 others = [d[0] for d in dupes[vid] if d[0] != cid]
-                statuses.append("ERROR"); codes.append("VOTER_ID_DUPLICATE")
-                descs.append(f"Voter ID '{vid}' is shared with customer(s): {', '.join(others[:5])}")
+                statuses.append("ERROR")
+                codes.append("VOTER_ID_DUPLICATE")
+                descs.append(
+                    f"Voter ID '{vid}' is shared with customer(s): {', '.join(others[:5])}"
+                )
         else:
-            statuses.append("OK"); codes.append(""); descs.append("")
+            statuses.append("OK")
+            codes.append("")
+            descs.append("")
     return _annotate(df, "voter_id_duplicate", statuses, codes, descs)
 
 
-@register("address_duplicate", "Fuzzy address match (token-set Jaccard ≥0.85) across different customer IDs")
+@register(
+    "address_duplicate",
+    "Fuzzy address match (token-set Jaccard ≥0.85) across different customer IDs",
+)
 def rule_address_duplicate(df: pl.DataFrame) -> pl.DataFrame:
     """Flag addresses that are fuzzy-similar using a token inverted-index.
 

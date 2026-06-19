@@ -7,7 +7,7 @@ import io
 import json
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
@@ -21,7 +21,8 @@ from fcmr_core.schemas.loader import available_report_types, get_canonical_field
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
+
 
 router = APIRouter()
 _templates_dir = Path(__file__).parent.parent / "web" / "templates"
@@ -32,6 +33,7 @@ templates = Jinja2Templates(directory=str(_templates_dir))
 # Dashboard
 # ---------------------------------------------------------------------------
 
+
 @router.get("", response_class=HTMLResponse)
 async def dashboard(request: Request):
     # Scope uploads to active engagement
@@ -39,7 +41,8 @@ async def dashboard(request: Request):
     uploads = store.list_uploads(engagement_id=engagement_id) if engagement_id else []
     report_types = available_report_types()
     return templates.TemplateResponse(
-        request=request, name="index.html",
+        request=request,
+        name="index.html",
         context={"uploads": uploads, "report_types": report_types},
     )
 
@@ -48,11 +51,13 @@ async def dashboard(request: Request):
 # Phase 1 — upload the file and redirect to column-mapping page
 # ---------------------------------------------------------------------------
 
+
 @router.get("/upload", response_class=HTMLResponse)
 async def upload_form(request: Request):
     report_types = available_report_types()
     return templates.TemplateResponse(
-        request=request, name="upload.html",
+        request=request,
+        name="upload.html",
         context={"report_types": report_types},
     )
 
@@ -64,8 +69,8 @@ async def do_upload(
     folder: list[UploadFile] = File(default=[]),
     files: list[UploadFile] = File(default=[]),
 ):
-    import zipfile
     import tempfile
+    import zipfile
 
     # Get engagement_id from session
     engagement_id = request.session.get("engagement_id")
@@ -81,7 +86,6 @@ async def do_upload(
 
     # Generate one batch_id for this upload request
     batch_id = str(uuid.uuid4())
-    ingestion_time = _now()
 
     # Process files from .zip if present
     temp_dir = None
@@ -150,6 +154,7 @@ async def do_upload(
 # Phase 2 — column-mapping UI
 # ---------------------------------------------------------------------------
 
+
 @router.get("/uploads/{upload_id}/map-columns", response_class=HTMLResponse)
 async def map_columns_form(request: Request, upload_id: str):
     upload = store.get_upload(upload_id)
@@ -186,7 +191,9 @@ async def map_columns_form(request: Request, upload_id: str):
         if schema:
             suggested_with_scores = schema.map_headers_with_scores(raw_headers)
             # Build suggested dict from fuzzy+exact matches (keys are raw_headers, values are canonicals)
-            suggested = {raw_h: canonical for raw_h, (canonical, score) in suggested_with_scores.items()}
+            suggested = {
+                raw_h: canonical for raw_h, (canonical, score) in suggested_with_scores.items()
+            }
 
     canonical_fields = get_canonical_fields(upload["report_type"])
 
@@ -194,7 +201,8 @@ async def map_columns_form(request: Request, upload_id: str):
     suggested_inverse = {canonical: raw_h for raw_h, canonical in suggested.items()}
 
     return templates.TemplateResponse(
-        request=request, name="column_map.html",
+        request=request,
+        name="column_map.html",
         context={
             "upload": upload,
             "raw_headers": raw_headers,
@@ -231,6 +239,7 @@ async def do_map_columns(request: Request, upload_id: str):
     # If csv_path is a blob URL, download it to /tmp for ingestion
     if raw_csv_path.startswith("http"):
         import httpx as _httpx
+
         tmp_dir = settings.uploads_dir / upload_id
         tmp_dir.mkdir(parents=True, exist_ok=True)
         csv_path = tmp_dir / upload["filename"]
@@ -294,6 +303,7 @@ async def do_map_columns(request: Request, upload_id: str):
 # Upload detail
 # ---------------------------------------------------------------------------
 
+
 @router.get("/uploads/{upload_id}", response_class=HTMLResponse)
 async def upload_detail(request: Request, upload_id: str):
     upload = store.get_upload(upload_id)
@@ -306,6 +316,7 @@ async def upload_detail(request: Request, upload_id: str):
 
     runs = store.list_runs(upload_id)
     return templates.TemplateResponse(
-        request=request, name="upload_detail.html",
+        request=request,
+        name="upload_detail.html",
         context={"upload": upload, "runs": runs, "mapping_display": mapping_display},
     )

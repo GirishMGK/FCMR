@@ -1,13 +1,12 @@
 """Unit tests for duplicate detection rules."""
 
 import polars as pl
-import pytest
 
 from fcmr_core.rules.duplicates import (
-    rule_pan_duplicate,
-    rule_mobile_duplicate,
     rule_bank_account_duplicate,
+    rule_mobile_duplicate,
     rule_name_dob_duplicate,
+    rule_pan_duplicate,
 )
 
 
@@ -34,10 +33,12 @@ class TestPanDuplicate:
         assert _code(df, "pan_duplicate", 1) == "PAN_DUPLICATE"
 
     def test_three_way_duplicate(self):
-        df = rule_pan_duplicate(self._make_df(
-            ["ABCPF1234A", "ABCPF1234A", "ABCPF1234A"],
-            ["C001", "C002", "C003"],
-        ))
+        df = rule_pan_duplicate(
+            self._make_df(
+                ["ABCPF1234A", "ABCPF1234A", "ABCPF1234A"],
+                ["C001", "C002", "C003"],
+            )
+        )
         for i in range(3):
             assert _code(df, "pan_duplicate", i) == "PAN_DUPLICATE"
 

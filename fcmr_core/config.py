@@ -28,8 +28,8 @@ def _detect_tier() -> str:
 # DuckDB limits per tier — keeps DuckDB from consuming all system RAM.
 # memory_limit caps in-process usage; spill to temp_dir when over limit.
 _DUCK_LIMITS = {
-    "low":  {"memory_gb": 3, "threads": 2},
-    "mid":  {"memory_gb": 6, "threads": 4},
+    "low": {"memory_gb": 3, "threads": 2},
+    "mid": {"memory_gb": 6, "threads": 4},
     "high": {"memory_gb": 12, "threads": 6},
 }
 
@@ -59,8 +59,8 @@ class Settings(BaseSettings):
     hw_tier: str = ""
 
     # DuckDB resource limits — derived from tier; override individually if needed
-    duckdb_memory_limit: str = ""   # e.g. "6GB"; empty = auto-detect from tier
-    duckdb_threads: int = 0          # 0 = auto-detect from tier
+    duckdb_memory_limit: str = ""  # e.g. "6GB"; empty = auto-detect from tier
+    duckdb_threads: int = 0  # 0 = auto-detect from tier
 
     # Ingest tuning — keep chunk size low enough to stay inside 15 GB RAM when
     # processing 5M-row CSVs with many wide columns.
