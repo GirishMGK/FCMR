@@ -21,10 +21,9 @@ from __future__ import annotations
 import hashlib
 from collections import defaultdict
 
-import duckdb
 import polars as pl
 
-from fcmr_core.config import apply_duckdb_limits, settings
+from fcmr_core.config import settings
 from fcmr_core.rules.registry import register
 
 
@@ -86,22 +85,22 @@ def _col_list(df: pl.DataFrame, col: str) -> list[str]:
     return df[col].cast(pl.Utf8, strict=False).fill_null("").to_list()
 
 
-def _exact_pairs_duckdb(keys: list[str]) -> list[tuple[int, int]]:
-    """Return (i, j) index pairs where i < j and keys[i] == keys[j] (both non-empty)."""
-    if not any(keys):
-        return []
-    work = pl.DataFrame({"_idx": list(range(len(keys))), "_key": keys})
-    with duckdb.connect() as con:
-        apply_duckdb_limits(con)
-        con.register("tbl", work.to_arrow())
-        rows = con.execute("""
-            SELECT a._idx, b._idx
-            FROM tbl a
-            JOIN tbl b ON a._key = b._key
-            WHERE a._key IS NOT NULL AND a._key <> ''
-              AND a._idx < b._idx
-        """).fetchall()
-    return [(int(r[0]), int(r[1])) for r in rows]
+def _union_by_key(uf: UnionFind, keys: list[str]) -> None:
+    """Union all rows sharing the same non-empty key.
+
+    Pure O(n) hash grouping: each row is unioned to the first row seen with the
+    same key, so a key shared by k rows costs k-1 unions — never the k²/2 pairs
+    a self-join would generate on pathological data (e.g. one PAN on 50K rows).
+    """
+    first_seen: dict[str, int] = {}
+    for idx, key in enumerate(keys):
+        if not key:
+            continue
+        prev = first_seen.get(key)
+        if prev is None:
+            first_seen[key] = idx
+        else:
+            uf.union(prev, idx)
 
 
 def _address_candidate_pairs(addrs: list[str], min_shared: int = 3) -> list[tuple[int, int]]:
@@ -134,7 +133,8 @@ def _address_candidate_pairs(addrs: list[str], min_shared: int = 3) -> list[tupl
 def _check_kyc_consistency(group_rows: list[dict]) -> bool:
     if not group_rows:
         return True
-    pans, aadhs, voter_ids, emails, mobiles, states, pincodes = set(), set(), set(), set(), set(), set(), set()
+    pans, aadhs, voter_ids = set(), set(), set()
+    emails, mobiles, states, pincodes = set(), set(), set(), set()
     for row in group_rows:
         if v := (row.get("pan") or "").strip().upper():
             pans.add(v)
@@ -171,32 +171,27 @@ def rule_ucid(df: pl.DataFrame) -> pl.DataFrame:
     n = len(df)
     uf = UnionFind(n)
 
-    # --- Exact-match fields: use DuckDB self-join (O(n log n)) ---
+    # --- Exact-match fields: O(n) hash grouping (no pair explosion) ---
 
     pans = [v.strip().upper() for v in _col_list(df, "pan")]
-    for i, j in _exact_pairs_duckdb(pans):
-        uf.union(i, j)
+    _union_by_key(uf, pans)
 
     aadh_hashes = [_hash_aadhaar(v) for v in _col_list(df, "aadhaar")]
-    for i, j in _exact_pairs_duckdb(aadh_hashes):
-        uf.union(i, j)
+    _union_by_key(uf, aadh_hashes)
 
     vids = [v.strip().upper() for v in _col_list(df, "voter_id")]
-    for i, j in _exact_pairs_duckdb(vids):
-        uf.union(i, j)
+    _union_by_key(uf, vids)
 
     names = _col_list(df, "full_name")
     dobs = _col_list(df, "dob")
     nd_keys = [
-        (n.strip().upper() + "|" + d.strip()) if n.strip() and d.strip() else ""
-        for n, d in zip(names, dobs)
+        (nm.strip().upper() + "|" + d.strip()) if nm.strip() and d.strip() else ""
+        for nm, d in zip(names, dobs)
     ]
-    for i, j in _exact_pairs_duckdb(nd_keys):
-        uf.union(i, j)
+    _union_by_key(uf, nd_keys)
 
     accts = [v.strip() for v in _col_list(df, "bank_account")]
-    for i, j in _exact_pairs_duckdb(accts):
-        uf.union(i, j)
+    _union_by_key(uf, accts)
 
     # --- Address fuzzy: token-bucket candidates → Jaccard check ---
     addrs = _col_list(df, "address_line1")
@@ -210,29 +205,29 @@ def rule_ucid(df: pl.DataFrame) -> pl.DataFrame:
     ucids = [ucid_map[uf.find(i)] for i in range(n)]
     ucid_sizes = [len(groups[uf.find(i)]) for i in range(n)]
 
-    # --- KYC consistency: only read the 7 KYC columns (not all columns) ---
+    # --- KYC consistency ---
+    # Materialize the 7 KYC columns to Python lists once (n scalar gets total,
+    # not 7n via df[col][i]).  Singleton groups are consistent by definition, so
+    # only groups with ≥2 members are inspected.
     kyc_cols = ["pan", "aadhaar", "voter_id", "email", "mobile", "state", "pincode"]
-    rows = [
-        {col: (df[col][i] if col in df.columns else None) for col in kyc_cols}
-        for i in range(n)
-    ]
+    kyc_data = {col: _col_list(df, col) for col in kyc_cols}
 
-    statuses, codes, descs = [], [], []
-    for i in range(n):
-        root = uf.find(i)
-        group_indices = groups[root]
-        group_rows = [rows[idx] for idx in group_indices]
+    statuses = ["OK"] * n
+    codes = [""] * n
+    descs = [""] * n
 
-        if _check_kyc_consistency(group_rows):
-            statuses.append("OK")
-            codes.append("")
-            descs.append("")
-        else:
-            statuses.append("WARN")
-            codes.append("UCID_KYC_INCONSISTENT")
-            descs.append(
-                f"UCID {ucids[i]} has conflicting KYC data (PAN, Aadhaar, Voter ID, email, mobile, state, or pincode)"
-            )
+    for root, members in groups.items():
+        if len(members) < 2:
+            continue  # a single-row group cannot conflict with itself
+        group_rows = [{col: kyc_data[col][idx] for col in kyc_cols} for idx in members]
+        if not _check_kyc_consistency(group_rows):
+            for idx in members:
+                statuses[idx] = "WARN"
+                codes[idx] = "UCID_KYC_INCONSISTENT"
+                descs[idx] = (
+                    f"UCID {ucids[idx]} has conflicting KYC data "
+                    "(PAN, Aadhaar, Voter ID, email, mobile, state, or pincode)"
+                )
 
     return df.with_columns([
         pl.Series("ucid", ucids, dtype=pl.Utf8),
