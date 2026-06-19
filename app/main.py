@@ -9,7 +9,16 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
-from app.api import auth, blob_upload, downloads, ead_consolidate, engagements, runs, system, uploads
+from app.api import (
+    auth,
+    blob_upload,
+    downloads,
+    ead_consolidate,
+    engagements,
+    runs,
+    system,
+    uploads,
+)
 from app.api import settings as settings_api
 from fcmr_core.catalog import store
 from fcmr_core.catalog.store import init_catalog

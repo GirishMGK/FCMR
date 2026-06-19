@@ -33,7 +33,12 @@ def test_list_categories():
     cats = list_categories()
     assert len(cats) == 4
     assert all("id" in c and "label" in c and "rules" in c and "count" in c for c in cats)
-    assert {c["id"] for c in cats} == {"kyc_format", "address_pin", "duplicates", "identity_grouping"}
+    assert {c["id"] for c in cats} == {
+        "kyc_format",
+        "address_pin",
+        "duplicates",
+        "identity_grouping",
+    }
     # Check rule counts
     assert cats[0]["count"] == 11  # kyc_format
     assert cats[1]["count"] == 4  # address_pin
@@ -101,8 +106,8 @@ def test_run_pipeline_all_rules():
     annotated = run_pipeline(df, rule_ids=None)
 
     # Check all rules were executed (all _exc_* columns present)
-    exc_cols = {c for c in annotated.columns if c.startswith("_exc_")}
-    rule_ids_executed = {c.split("_exc_")[1].rsplit("_", 2)[0] for c in exc_cols if "_status" in c}
+    exc_cols = {c for c in annotated.columns if c.startswith("_exc_") and c.endswith("_status")}
+    rule_ids_executed = {c[5:-7] for c in exc_cols}  # Extract between "_exc_" and "_status"
     assert rule_ids_executed == all_rule_ids
 
 
@@ -121,8 +126,8 @@ def test_run_pipeline_filtered():
     annotated = run_pipeline(df, rule_ids=["pan_duplicate", "aadhaar_duplicate"])
 
     # Check only selected rules were executed
-    exc_cols = {c for c in annotated.columns if c.startswith("_exc_")}
-    rule_ids_executed = {c.split("_exc_")[1].rsplit("_", 2)[0] for c in exc_cols if "_status" in c}
+    exc_cols = {c for c in annotated.columns if c.startswith("_exc_") and c.endswith("_status")}
+    rule_ids_executed = {c[5:-7] for c in exc_cols}  # Extract between "_exc_" and "_status"
     assert rule_ids_executed == {"pan_duplicate", "aadhaar_duplicate"}
 
 
@@ -175,7 +180,9 @@ def test_run_pipeline_progress_callback():
         progress_calls.append((completed, total, rule_id))
 
     # Run only 2 rules
-    annotated = run_pipeline(df, on_progress=track_progress, rule_ids=["pan_format", "aadhaar_format"])
+    annotated = run_pipeline(
+        df, on_progress=track_progress, rule_ids=["pan_format", "aadhaar_format"]
+    )
 
     # Check progress: completed should increment, total should be 2
     assert len(progress_calls) == 2

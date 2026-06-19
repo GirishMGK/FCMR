@@ -62,8 +62,13 @@ async def start_run(
         logger.info("start_run mode=all upload_id=%s", upload_id)
     else:
         rule_ids = resolve_rule_ids(categories or [], rules or [])
-        logger.info("start_run mode=selected upload_id=%s categories=%s rules=%s resolved=%s",
-                   upload_id, categories, rules, rule_ids)
+        logger.info(
+            "start_run mode=selected upload_id=%s categories=%s rules=%s resolved=%s",
+            upload_id,
+            categories,
+            rules,
+            rule_ids,
+        )
 
     background_tasks.add_task(_run_analytics, run_id, upload_id, rule_ids)
 
