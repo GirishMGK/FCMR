@@ -101,8 +101,8 @@ def test_run_pipeline_all_rules():
     annotated = run_pipeline(df, rule_ids=None)
 
     # Check all rules were executed (all _exc_* columns present)
-    exc_cols = {c for c in annotated.columns if c.startswith("_exc_")}
-    rule_ids_executed = {c.split("_exc_")[1].rsplit("_", 2)[0] for c in exc_cols if "_status" in c}
+    exc_cols = {c for c in annotated.columns if c.startswith("_exc_") and c.endswith("_status")}
+    rule_ids_executed = {c[5:-7] for c in exc_cols}  # Extract between "_exc_" and "_status"
     assert rule_ids_executed == all_rule_ids
 
 
@@ -121,8 +121,8 @@ def test_run_pipeline_filtered():
     annotated = run_pipeline(df, rule_ids=["pan_duplicate", "aadhaar_duplicate"])
 
     # Check only selected rules were executed
-    exc_cols = {c for c in annotated.columns if c.startswith("_exc_")}
-    rule_ids_executed = {c.split("_exc_")[1].rsplit("_", 2)[0] for c in exc_cols if "_status" in c}
+    exc_cols = {c for c in annotated.columns if c.startswith("_exc_") and c.endswith("_status")}
+    rule_ids_executed = {c[5:-7] for c in exc_cols}  # Extract between "_exc_" and "_status"
     assert rule_ids_executed == {"pan_duplicate", "aadhaar_duplicate"}
 
 
