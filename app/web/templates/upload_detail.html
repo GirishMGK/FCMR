@@ -47,7 +47,7 @@
             Select categories…
           </button>
           <div id="cat_picker" style="display:none; margin-top:12px; max-height:400px; overflow-y:auto;">
-            <form id="category_form" method="POST" action="/uploads/{{ upload.upload_id }}/run" style="display:none;">
+            <form id="category_form" method="POST" action="/uploads/{{ upload.upload_id }}/run">
               <input type="hidden" name="mode" value="selected">
               {% for cat in categories %}
               <div style="margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid var(--border);">

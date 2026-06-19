@@ -44,8 +44,8 @@ async def start_run(
     upload_id: str,
     background_tasks: BackgroundTasks,
     mode: str = Form("all"),
-    categories: list[str] = Form([]),
-    rules: list[str] = Form([]),
+    categories: list[str] | None = Form(None),
+    rules: list[str] | None = Form(None),
 ):
     upload = store.get_upload(upload_id)
     if not upload:
@@ -60,7 +60,7 @@ async def start_run(
     if mode == "all":
         rule_ids = None
     else:
-        rule_ids = resolve_rule_ids(categories, rules)
+        rule_ids = resolve_rule_ids(categories or [], rules or [])
 
     background_tasks.add_task(_run_analytics, run_id, upload_id, rule_ids)
 
