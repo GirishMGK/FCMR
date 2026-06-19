@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
-
 import polars as pl
-import pytest
 
 from fcmr_core.rules.registry import CATEGORIES, list_categories, resolve_rule_ids, run_pipeline
 
