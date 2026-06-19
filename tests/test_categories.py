@@ -33,7 +33,12 @@ def test_list_categories():
     cats = list_categories()
     assert len(cats) == 4
     assert all("id" in c and "label" in c and "rules" in c and "count" in c for c in cats)
-    assert {c["id"] for c in cats} == {"kyc_format", "address_pin", "duplicates", "identity_grouping"}
+    assert {c["id"] for c in cats} == {
+        "kyc_format",
+        "address_pin",
+        "duplicates",
+        "identity_grouping",
+    }
     # Check rule counts
     assert cats[0]["count"] == 11  # kyc_format
     assert cats[1]["count"] == 4  # address_pin
@@ -175,7 +180,9 @@ def test_run_pipeline_progress_callback():
         progress_calls.append((completed, total, rule_id))
 
     # Run only 2 rules
-    annotated = run_pipeline(df, on_progress=track_progress, rule_ids=["pan_format", "aadhaar_format"])
+    annotated = run_pipeline(
+        df, on_progress=track_progress, rule_ids=["pan_format", "aadhaar_format"]
+    )
 
     # Check progress: completed should increment, total should be 2
     assert len(progress_calls) == 2

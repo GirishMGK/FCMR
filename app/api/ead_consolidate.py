@@ -46,7 +46,9 @@ async def ead_consolidate_page(request: Request):
     engagement_id = request.session.get("engagement_id")
     uploads = store.list_uploads(engagement_id=engagement_id)
     ead_ready = [u for u in uploads if u["report_type"] == "ead_files" and u["status"] == "ready"]
-    ead_pending = [u for u in uploads if u["report_type"] == "ead_files" and u["status"] == "mapping_pending"]
+    ead_pending = [
+        u for u in uploads if u["report_type"] == "ead_files" and u["status"] == "mapping_pending"
+    ]
     return templates.TemplateResponse(
         request=request,
         name="ead_consolidate.html",
@@ -106,7 +108,9 @@ async def ead_download_excel(request: Request):
     rows = df.to_numpy(allow_copy=True)
     for ri, row in enumerate(rows, start=2):
         for ci, val in enumerate(row, start=1):
-            cell = ws.cell(row=ri, column=ci, value=None if (val is None or str(val) == "None") else val)
+            cell = ws.cell(
+                row=ri, column=ci, value=None if (val is None or str(val) == "None") else val
+            )
             cell.font = data_font
 
     # Auto-width (cap at 40)

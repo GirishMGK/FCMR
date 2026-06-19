@@ -97,8 +97,13 @@ def list_rules() -> list[RuleMeta]:
 
 
 _NUMERIC_CANONICALS = {
-    "loan_amount", "outstanding_principal", "emi_amount", "age",
-    "sanctioned_amount", "disbursed_amount", "outstanding_balance",
+    "loan_amount",
+    "outstanding_principal",
+    "emi_amount",
+    "age",
+    "sanctioned_amount",
+    "disbursed_amount",
+    "outstanding_balance",
 }
 
 
@@ -117,9 +122,16 @@ def _coerce_str_columns(df: pl.DataFrame) -> pl.DataFrame:
         if col in _NUMERIC_CANONICALS:
             continue
         if df[col].dtype in (
-            pl.Int8, pl.Int16, pl.Int32, pl.Int64,
-            pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64,
-            pl.Float32, pl.Float64,
+            pl.Int8,
+            pl.Int16,
+            pl.Int32,
+            pl.Int64,
+            pl.UInt8,
+            pl.UInt16,
+            pl.UInt32,
+            pl.UInt64,
+            pl.Float32,
+            pl.Float64,
         ):
             casts.append(pl.col(col).cast(pl.Utf8, strict=False))
     if casts:
@@ -136,15 +148,11 @@ def list_categories() -> list[dict]:
         rules = []
         for rule_id in cat["rule_ids"]:
             rules.append({"id": rule_id, "description": rule_map.get(rule_id, "")})
-        result.append(
-            {"id": cat["id"], "label": cat["label"], "rules": rules, "count": len(rules)}
-        )
+        result.append({"id": cat["id"], "label": cat["label"], "rules": rules, "count": len(rules)})
     return result
 
 
-def resolve_rule_ids(
-    category_ids: list[str], rule_ids: list[str]
-) -> list[str] | None:
+def resolve_rule_ids(category_ids: list[str], rule_ids: list[str]) -> list[str] | None:
     """Resolve selected categories and rules into a unified rule_ids list.
 
     Returns:
