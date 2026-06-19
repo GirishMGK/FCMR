@@ -11,7 +11,7 @@ from __future__ import annotations
 import csv
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
@@ -163,7 +163,9 @@ def _stream_to_parquet(
 
         accepted_rows: int = con.execute(
             f"SELECT COUNT(*) FROM read_parquet('{parquet_path.as_posix()}')"
-        ).fetchone()[0]  # type: ignore[index]
+        ).fetchone()[
+            0
+        ]  # type: ignore[index]
 
     rejected_rows = total_rows - accepted_rows
 
@@ -186,4 +188,4 @@ def read_parquet(parquet_path: Path) -> pl.LazyFrame:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()

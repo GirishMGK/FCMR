@@ -1,4 +1,4 @@
-"""Beneficiary tagging and stable internal customer ID creation.
+﻿"""Beneficiary tagging and stable internal customer ID creation.
 
 Logic:
   - A stable internal key (fcmr_customer_key) is derived deterministically
@@ -50,7 +50,11 @@ def rule_beneficiary_tagging(df: pl.DataFrame) -> pl.DataFrame:
         pan_norm = (pan or "").strip().upper()
         aadh_hash = _hash_aadhaar(aadh_raw)
         mob_norm = (mob or "").strip().replace(" ", "").replace("-", "")
-        name_dob = (name.strip().upper() + "|" + dob.strip()) if name.strip() and dob.strip() else ""
+        name_dob = (
+            ((name or "").strip().upper() + "|" + (dob or "").strip())
+            if (name or "").strip() and (dob or "").strip()
+            else ""
+        )
 
         # Stable customer key: best available identifier (priority: PAN > Aadhaar > mobile > name+DOB)
         if pan_norm and len(pan_norm) == 10:
@@ -80,10 +84,12 @@ def rule_beneficiary_tagging(df: pl.DataFrame) -> pl.DataFrame:
 
     group_ids = [gk_to_gid[gk] for gk in group_keys]
 
-    return df.with_columns([
-        pl.Series("_exc_beneficiary_tagging_status", ["OK"] * len(df), dtype=pl.Utf8),
-        pl.Series("_exc_beneficiary_tagging_code", [""] * len(df), dtype=pl.Utf8),
-        pl.Series("_exc_beneficiary_tagging_desc", [""] * len(df), dtype=pl.Utf8),
-        pl.Series("fcmr_customer_key", customer_keys, dtype=pl.Utf8),
-        pl.Series("fcmr_group_id", group_ids, dtype=pl.Utf8),
-    ])
+    return df.with_columns(
+        [
+            pl.Series("_exc_beneficiary_tagging_status", ["OK"] * len(df), dtype=pl.Utf8),
+            pl.Series("_exc_beneficiary_tagging_code", [""] * len(df), dtype=pl.Utf8),
+            pl.Series("_exc_beneficiary_tagging_desc", [""] * len(df), dtype=pl.Utf8),
+            pl.Series("fcmr_customer_key", customer_keys, dtype=pl.Utf8),
+            pl.Series("fcmr_group_id", group_ids, dtype=pl.Utf8),
+        ]
+    )

@@ -62,7 +62,7 @@ def select_sample(
 
     # Read exception codes for each row
     try:
-        df = pl.read_csv(wide_csv_path, columns=["exception_codes"])
+        df = pl.read_csv(wide_csv_path, columns=["exception_codes"], infer_schema_length=0)
         exception_codes_list = df["exception_codes"].to_list()
     except Exception:
         exception_codes_list = [""] * population
@@ -85,7 +85,9 @@ def select_sample(
         selected_indices = random.sample(indices, stratum_sample_size)
 
         for row_idx in selected_indices:
-            codes_str = str(exception_codes_list[row_idx]) if row_idx < len(exception_codes_list) else ""
+            codes_str = (
+                str(exception_codes_list[row_idx]) if row_idx < len(exception_codes_list) else ""
+            )
             codes = [c.strip() for c in codes_str.split("|") if c.strip()] if codes_str else []
 
             # Find highest severity code
@@ -104,12 +106,14 @@ def select_sample(
             else:
                 selection_reason = f"{max_severity}: No specific code"
 
-            samples.append({
-                "row_index": row_idx,
-                "exception_codes": codes_str,
-                "selection_reason": selection_reason,
-                "criticality": max_severity,
-            })
+            samples.append(
+                {
+                    "row_index": row_idx,
+                    "exception_codes": codes_str,
+                    "selection_reason": selection_reason,
+                    "criticality": max_severity,
+                }
+            )
 
     # Sort by criticality then row index
     criticality_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "OK": 4}

@@ -8,12 +8,11 @@ from __future__ import annotations
 
 import math
 
-
 # Color scheme
 _COLORS = {
-    "OK": "#10b981",      # green
-    "WARN": "#f59e0b",    # orange
-    "ERROR": "#ef4444",   # red
+    "OK": "#10b981",  # green
+    "WARN": "#f59e0b",  # orange
+    "ERROR": "#ef4444",  # red
 }
 
 _COLOR_CODES = {
@@ -60,11 +59,11 @@ def build_donut_svg(
 
     svg_lines = [
         f'<svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg">',
-        '<style>',
-        '.donut-label { font-size: 12px; fill: #374151; text-anchor: middle; }',
-        '.donut-center-text { font-size: 20px; font-weight: bold; fill: #1f2937; text-anchor: middle; }',
-        '.donut-center-subtext { font-size: 12px; fill: #6b7280; text-anchor: middle; }',
-        '</style>',
+        "<style>",
+        ".donut-label { font-size: 12px; fill: #374151; text-anchor: middle; }",
+        ".donut-center-text { font-size: 20px; font-weight: bold; fill: #1f2937; text-anchor: middle; }",
+        ".donut-center-subtext { font-size: 12px; fill: #6b7280; text-anchor: middle; }",
+        "</style>",
     ]
 
     # Status order and calculation
@@ -168,12 +167,12 @@ def build_bar_chart(
 
     svg_lines = [
         f'<svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg">',
-        '<style>',
-        '.bar-label { font-size: 11px; fill: #374151; text-anchor: end; }',
-        '.bar-value { font-size: 11px; fill: #1f2937; font-weight: bold; }',
-        '.chart-title { font-size: 14px; font-weight: bold; fill: #1f2937; }',
-        '</style>',
-        f'<text x="10" y="20" class="chart-title">Top Exception Codes</text>',
+        "<style>",
+        ".bar-label { font-size: 11px; fill: #374151; text-anchor: end; }",
+        ".bar-value { font-size: 11px; fill: #1f2937; font-weight: bold; }",
+        ".chart-title { font-size: 14px; font-weight: bold; fill: #1f2937; }",
+        "</style>",
+        '<text x="10" y="20" class="chart-title">Top Exception Codes</text>',
     ]
 
     for i, (code, count) in enumerate(sorted_items):

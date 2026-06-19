@@ -1,11 +1,9 @@
 """Integration tests for the ingestion pipeline."""
 
 import csv
-import tempfile
 from pathlib import Path
 
 import polars as pl
-import pytest
 
 from fcmr_core.ingestion.pipeline import ingest_csv, read_parquet
 
@@ -23,10 +21,23 @@ def _write_csv(rows: list[dict], path: Path) -> None:
 class TestIngestionPipeline:
     def test_basic_ingest(self, tmp_path):
         csv_path = tmp_path / "test.csv"
-        _write_csv([
-            {"customer_id": "C001", "full_name": "Test User", "pan": "ABCPF1234A", "pincode": "110001"},
-            {"customer_id": "C002", "full_name": "Another User", "pan": "XYZPG5678B", "pincode": "400001"},
-        ], csv_path)
+        _write_csv(
+            [
+                {
+                    "customer_id": "C001",
+                    "full_name": "Test User",
+                    "pan": "ABCPF1234A",
+                    "pincode": "110001",
+                },
+                {
+                    "customer_id": "C002",
+                    "full_name": "Another User",
+                    "pan": "XYZPG5678B",
+                    "pincode": "400001",
+                },
+            ],
+            csv_path,
+        )
 
         result = ingest_csv(csv_path, "customer_master", "test-ingest-01")
         assert result.total_rows == 2
@@ -37,9 +48,17 @@ class TestIngestionPipeline:
     def test_column_mapping_aliases(self, tmp_path):
         # Use messy real-world header names (aliases) instead of canonical ones
         csv_path = tmp_path / "messy.csv"
-        _write_csv([
-            {"cust_id": "C001", "borrower_name": "Test User", "pan_no": "ABCPF1234A", "pin_code": "110001"},
-        ], csv_path)
+        _write_csv(
+            [
+                {
+                    "cust_id": "C001",
+                    "borrower_name": "Test User",
+                    "pan_no": "ABCPF1234A",
+                    "pin_code": "110001",
+                },
+            ],
+            csv_path,
+        )
 
         result = ingest_csv(csv_path, "customer_master", "test-ingest-02")
         assert result.accepted_rows == 1
@@ -66,9 +85,9 @@ class TestIngestionPipeline:
 
     def test_parquet_is_readable_by_polars(self, tmp_path):
         csv_path = tmp_path / "readable.csv"
-        _write_csv([
-            {"customer_id": f"C{i:03d}", "full_name": f"User {i}"} for i in range(10)
-        ], csv_path)
+        _write_csv(
+            [{"customer_id": f"C{i:03d}", "full_name": f"User {i}"} for i in range(10)], csv_path
+        )
 
         result = ingest_csv(csv_path, "customer_master", "test-ingest-05")
         lf = read_parquet(result.parquet_path)

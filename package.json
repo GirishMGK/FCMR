@@ -1,0 +1,28 @@
+{
+  "name": "sangir-automations",
+  "version": "0.1.23",
+  "description": "SanGir Automations — Deterministic audit analytics for NBFC loan portfolios",
+  "author": "Sandeep Reddy <ihbsandeepreddy@gmail.com>",
+  "license": "Apache-2.0",
+  "main": "electron/main.js",
+  "homepage": "./",
+  "scripts": {
+    "start": "electron .",
+    "build:backend": "pyinstaller build/sangir-backend.spec",
+    "build:frontend": "echo 'No frontend build needed (server-rendered)'",
+    "dist": "electron-builder",
+    "dev": "concurrently \"npm start\" \"python -m uvicorn app.main:app --port 8000\"",
+    "lint": "ruff check .",
+    "format": "black .",
+    "test": "pytest -m 'not perf' -v"
+  },
+  "dependencies": {
+    "electron-updater": "^6.2.0",
+    "axios": "^1.7.0"
+  },
+  "devDependencies": {
+    "electron": "^29.0.0",
+    "electron-builder": "^24.9.0",
+    "concurrently": "^8.2.0"
+  }
+}

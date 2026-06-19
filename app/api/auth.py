@@ -11,7 +11,6 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from fcmr_core.catalog import store
-from fcmr_core.config import settings
 
 router = APIRouter()
 _templates_dir = Path(__file__).parent.parent / "web" / "templates"
@@ -44,7 +43,9 @@ def _ensure_admin() -> None:
             pwd_hash, salt = _hash_password(_ADMIN_PASSWORD)
             # Store salt:hash in password_hash field
             store.create_user(_ADMIN_USERNAME, f"{salt}:{pwd_hash}", "Admin User")
-            print(f"\n🔐 Default admin user created: username='{_ADMIN_USERNAME}', password='{_ADMIN_PASSWORD}'")
+            print(
+                f"\n🔐 Default admin user created: username='{_ADMIN_USERNAME}', password='{_ADMIN_PASSWORD}'"
+            )
             print("   ⚠️  CHANGE THIS PASSWORD IMMEDIATELY ON FIRST LOGIN!\n")
     except Exception:
         pass  # User might already exist

@@ -9,10 +9,14 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
+from app.api import auth, blob_upload, downloads, ead_consolidate, engagements, runs, system, uploads
+from app.api import settings as settings_api
 from fcmr_core.catalog import store
 from fcmr_core.catalog.store import init_catalog
 from fcmr_core.config import settings
-from app.api import auth, blob_upload, downloads, ead_consolidate, engagements, runs, settings as settings_api, uploads
+from fcmr_core.logging_setup import get_logger
+
+logger = get_logger("app")
 
 
 @asynccontextmanager
@@ -21,18 +25,24 @@ async def lifespan(app: FastAPI):
     init_catalog()
     auth._ensure_admin()
     store.init_settings()
+    logger.info("Application startup: SanGir Automations ready")
     yield
+    logger.info("Application shutdown")
 
 
 app = FastAPI(
     title="SanGir Automations",
-    description="Audit Analytics & Automated Solutions — Deterministic KYC and data-quality analytics for NBFC loan audits.",
+    description=(
+        "Audit Analytics & Automated Solutions — "
+        "Deterministic KYC and data-quality analytics for NBFC loan audits."
+    ),
     version="0.1.0",
     lifespan=lifespan,
 )
 
 # Ensure catalog + admin user exist — idempotent, safe to call on every cold start
 _initialized = False
+
 
 def _ensure_initialized() -> None:
     global _initialized
@@ -57,6 +67,7 @@ class LoginRequiredMiddleware(BaseHTTPMiddleware):
         if "username" not in request.session:
             return RedirectResponse(url="/login", status_code=303)
         return await call_next(request)
+
 
 # Add middlewares in reverse order (last added = innermost = runs first)
 app.add_middleware(LoginRequiredMiddleware)
@@ -83,6 +94,9 @@ app.include_router(downloads.router, prefix="", tags=["downloads"])
 
 # Settings routes — require login
 app.include_router(settings_api.router, prefix="", tags=["settings"])
+
+# System info & monitoring routes — require login
+app.include_router(system.router, prefix="/api", tags=["system"])
 
 # Blob upload routes (token endpoint is public; register endpoint requires login)
 app.include_router(blob_upload.router, prefix="", tags=["blob"])

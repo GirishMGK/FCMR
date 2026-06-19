@@ -7,10 +7,10 @@ so the browser can authenticate with Vercel Blob.
 
 Requires BLOB_READ_WRITE_TOKEN environment variable (set in Vercel project settings).
 """
+
 from __future__ import annotations
 
 import csv
-import io
 import os
 import uuid
 from pathlib import Path
@@ -20,8 +20,6 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from fcmr_core.catalog import store
-from fcmr_core.config import settings
-from fcmr_core.ingestion.pipeline import sniff_headers
 
 router = APIRouter()
 
@@ -83,9 +81,7 @@ async def upload_from_blob(
 
     # Fetch just the first 8 KB to sniff headers — avoids pulling the whole file
     async with httpx.AsyncClient() as client:
-        head_resp = await client.get(
-            blob_url, headers={"Range": "bytes=0-8191"}
-        )
+        head_resp = await client.get(blob_url, headers={"Range": "bytes=0-8191"})
     first_chunk = head_resp.text
 
     # Parse the first line as CSV to extract headers
@@ -99,10 +95,6 @@ async def upload_from_blob(
         report_type, filename, batch_id=batch_id, engagement_id=engagement_id
     )
     # Store the blob URL in the csv_path field so ingest can download it later
-    store.set_mapping_pending(
-        upload_id, csv_path=Path(blob_url), sniffed_headers=headers
-    )
+    store.set_mapping_pending(upload_id, csv_path=Path(blob_url), sniffed_headers=headers)
 
-    return RedirectResponse(
-        url=f"/dashboard/uploads/{upload_id}/map-columns", status_code=303
-    )
+    return RedirectResponse(url=f"/dashboard/uploads/{upload_id}/map-columns", status_code=303)

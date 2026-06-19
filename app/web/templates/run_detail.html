@@ -2,11 +2,7 @@
 {% block title %}Analytics Run — SanGir Automations{% endblock %}
 {% block page_title %}Data Analytics{% endblock %}
 
-{% block head %}
-{% if run.status in ["running", "pending"] %}
-<meta http-equiv="refresh" content="4">
-{% endif %}
-{% endblock %}
+{% block head %}{% endblock %}
 
 {% block topbar_actions %}
   <a href="/dashboard" class="btn btn-ghost" style="margin-left:auto;">← Dashboard</a>
@@ -25,6 +21,9 @@
         <dt>Status</dt><dd><span class="badge badge-{{ run.status }}">{{ run.status }}</span></dd>
         <dt>Started</dt><dd class="timestamp">{{ run.started_at[:19].replace("T"," ") if run.started_at else "—" }} UTC</dd>
         <dt>Finished</dt><dd class="timestamp">{{ run.finished_at[:19].replace("T"," ") if run.finished_at else "—" }} UTC</dd>
+        {% if ran_categories %}
+        <dt>Ran</dt><dd>{{ ran_categories }}</dd>
+        {% endif %}
         {% if run.error %}
         <dt>Error</dt><dd class="error-text">{{ run.error }}</dd>
         {% endif %}
@@ -33,20 +32,119 @@
   </div>
 </div>
 
-{# ── Running state ── #}
-{% if run.status == "running" %}
-<div class="card">
-  <div class="running-indicator">
-    <div class="spinner"></div>
-    <div>
+{# ── Running / pending state ── #}
+{% if run.status in ["running", "pending"] %}
+<div class="card" id="running-card">
+  <div style="display:flex; align-items:flex-start; gap:16px;">
+    <div class="spinner" style="margin-top:3px; flex-shrink:0;"></div>
+    <div style="flex:1;">
       <strong style="font-size:14px;">Analytics running…</strong>
-      <p class="help-text" style="margin-top:4px;">
+      <p class="help-text" style="margin-top:4px; margin-bottom:16px;">
         Processing all rows through KYC format, duplicate, PIN and address checks.
-        This page refreshes automatically every 4 seconds.
       </p>
+
+      {# Progress bar #}
+      <div style="margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+          <span id="step-label" style="font-size:12.5px; color:var(--fg); font-weight:500;">Starting…</span>
+          <span id="pct-label" style="font-size:12.5px; color:var(--muted); font-weight:600;">0%</span>
+        </div>
+        <div style="background:var(--border,#e5e7eb); border-radius:6px; height:10px; overflow:hidden;">
+          <div id="progress-bar"
+               style="height:100%; width:0%; background:oklch(55% 0.18 260); border-radius:6px;
+                      transition:width 0.5s ease, background 0.3s ease;">
+          </div>
+        </div>
+      </div>
+
+      {# Resource usage during run #}
+      <div id="resource-monitor" style="margin-bottom:14px; padding:10px; background:var(--bg-alt); border-radius:6px; display:none;">
+        <div style="font-size:11.5px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div>
+            <div style="color:var(--muted); margin-bottom:2px;">RAM Usage</div>
+            <div style="font-weight:600;" id="monitor-ram">—</div>
+          </div>
+          <div>
+            <div style="color:var(--muted); margin-bottom:2px;">CPU Usage</div>
+            <div style="font-weight:600;" id="monitor-cpu">—</div>
+          </div>
+          <div>
+            <div style="color:var(--muted); margin-bottom:2px;">Disk Spill</div>
+            <div style="font-weight:600;" id="monitor-spill">—</div>
+          </div>
+          <div>
+            <div style="color:var(--muted); margin-bottom:2px;">Available RAM</div>
+            <div style="font-weight:600;" id="monitor-avail">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <button id="stop-btn" onclick="stopRun()" class="btn btn-sm"
+                style="background:oklch(55% 0.18 25); color:#fff; border:none;">
+          Stop
+        </button>
+      </div>
     </div>
   </div>
 </div>
+
+<script>
+(function () {
+  const RUN_ID = "{{ run.run_id }}";
+
+  function updateProgress(pct, label) {
+    const bar  = document.getElementById('progress-bar');
+    const pctEl = document.getElementById('pct-label');
+    const lblEl = document.getElementById('step-label');
+    if (bar)   bar.style.width = pct + '%';
+    if (bar && pct >= 100) bar.style.background = 'oklch(55% 0.18 145)';
+    if (pctEl) pctEl.textContent = pct + '%';
+    if (lblEl && label) lblEl.textContent = label;
+  }
+
+  async function updateResourceMonitor() {
+    try {
+      const res = await fetch('/api/system/usage');
+      const data = await res.json();
+      document.getElementById('monitor-ram').textContent = Math.round(data.ram.percent) + '%';
+      document.getElementById('monitor-cpu').textContent = Math.round(data.cpu.percent) + '%';
+      document.getElementById('monitor-spill').textContent = (data.disk_spill_mb / 1024).toFixed(2) + ' GB';
+      document.getElementById('monitor-avail').textContent = data.ram.available_gb.toFixed(1) + ' GB';
+    } catch (e) {
+      console.error('Resource monitor fetch failed:', e);
+    }
+  }
+
+  function poll() {
+    fetch('/runs/' + RUN_ID + '/status')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        updateProgress(data.progress_pct || 0, data.progress_step || '');
+        document.getElementById('resource-monitor').style.display = 'block';
+        updateResourceMonitor();
+        if (data.status === 'running' || data.status === 'pending') {
+          setTimeout(poll, 1200);
+        } else {
+          document.getElementById('resource-monitor').style.display = 'none';
+          window.location.reload();
+        }
+      })
+      .catch(function () { setTimeout(poll, 3000); });
+  }
+
+  poll();
+
+  window.stopRun = function () {
+    const btn = document.getElementById('stop-btn');
+    btn.disabled = true;
+    btn.textContent = 'Stopping…';
+    fetch('/runs/' + RUN_ID + '/cancel', { method: 'POST' })
+      .then(function () { btn.textContent = 'Stop requested'; })
+      .catch(function () { btn.disabled = false; btn.textContent = 'Stop'; });
+  };
+})();
+</script>
 
 {# ── Completed state ── #}
 {% elif summary %}
@@ -101,60 +199,63 @@
 </div>
 {% endif %}
 
-{# Exception codes table #}
-{% if summary.exception_codes %}
+{# Exception codes table — ALL codes (not just top 10) #}
+{% if summary.all_codes %}
 <div class="card" style="padding:0; overflow:hidden;">
   <div style="padding:16px 20px 14px; border-bottom:1px solid var(--border);">
-    <div class="card-title" style="margin-bottom:0;">Exception Codes Detail</div>
+    <div class="card-title" style="margin-bottom:0;">Exception Codes Detail (All {{ summary.all_codes | length }} codes)</div>
+    <div style="font-size:12px; color:var(--muted); margin-top:4px;">Showing all exception types found in this analysis</div>
   </div>
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>Exception Code</th>
-        <th>Category</th>
-        <th style="text-align:right;">Count</th>
-        <th style="text-align:right; width:160px;">% of Total</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% set max_count = summary.top_codes[0]["count"] if summary.top_codes else 1 %}
-      {% for item in summary.top_codes %}
-      {% set pct = (item["count"] / summary.total * 100) if summary.total > 0 else 0 %}
-      {% set bar_pct = (item["count"] / max_count * 100) | round(0) | int %}
-      {% set code = item["exception_code"] %}
-      {% if "KYC" in code or "PAN" in code or "AADHAAR" in code or "DL" in code or "VOTER" in code or "PASSPORT" in code or "DOB" in code or "EMAIL" in code or "MOBILE" in code %}
-        {% set cat = "KYC Format" %}
-        {% set cat_class = "badge-cat-kyc" %}
-        {% set bar_color = "oklch(60% 0.16 40)" %}
-      {% elif "ADDR" in code or "PIN" in code %}
-        {% set cat = "Address" %}
-        {% set cat_class = "badge-cat-addr" %}
-        {% set bar_color = "oklch(58% 0.14 260)" %}
-      {% elif "DUP" in code %}
-        {% set cat = "Duplicates" %}
-        {% set cat_class = "badge-cat-dup" %}
-        {% set bar_color = "oklch(68% 0.15 82)" %}
-      {% else %}
-        {% set cat = "Other" %}
-        {% set cat_class = "badge-cat-other" %}
-        {% set bar_color = "oklch(58% 0.14 145)" %}
-      {% endif %}
-      <tr>
-        <td class="mono">{{ code }}</td>
-        <td><span class="badge {{ cat_class }}">{{ cat }}</span></td>
-        <td class="mono right">{{ "{:,}".format(item["count"]) }}</td>
-        <td>
-          <div class="exc-bar-wrap">
-            <div class="exc-bar-track">
-              <div class="exc-bar-fill" style="width:{{ bar_pct }}%; background:{{ bar_color }};"></div>
+  <div style="max-height:600px; overflow-y:auto; border-bottom:1px solid var(--border);">
+    <table class="data-table" style="margin-bottom:0;">
+      <thead style="position:sticky; top:0; background:var(--bg); z-index:1;">
+        <tr>
+          <th>Exception Code</th>
+          <th>Category</th>
+          <th style="text-align:right;">Count</th>
+          <th style="text-align:right; width:160px;">% of Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set max_count = summary.all_codes[0]["count"] if summary.all_codes else 1 %}
+        {% for item in summary.all_codes %}
+        {% set pct = (item["count"] / summary.total * 100) if summary.total > 0 else 0 %}
+        {% set bar_pct = (item["count"] / max_count * 100) | round(0) | int %}
+        {% set code = item["exception_code"] %}
+        {% if "KYC" in code or "PAN" in code or "AADHAAR" in code or "DL" in code or "VOTER" in code or "PASSPORT" in code or "DOB" in code or "EMAIL" in code or "MOBILE" in code %}
+          {% set cat = "KYC Format" %}
+          {% set cat_class = "badge-cat-kyc" %}
+          {% set bar_color = "oklch(60% 0.16 40)" %}
+        {% elif "ADDR" in code or "PIN" in code %}
+          {% set cat = "Address" %}
+          {% set cat_class = "badge-cat-addr" %}
+          {% set bar_color = "oklch(58% 0.14 260)" %}
+        {% elif "DUP" in code %}
+          {% set cat = "Duplicates" %}
+          {% set cat_class = "badge-cat-dup" %}
+          {% set bar_color = "oklch(68% 0.15 82)" %}
+        {% else %}
+          {% set cat = "Other" %}
+          {% set cat_class = "badge-cat-other" %}
+          {% set bar_color = "oklch(58% 0.14 145)" %}
+        {% endif %}
+        <tr>
+          <td class="mono">{{ code }}</td>
+          <td><span class="badge {{ cat_class }}">{{ cat }}</span></td>
+          <td class="mono right">{{ "{:,}".format(item["count"]) }}</td>
+          <td>
+            <div class="exc-bar-wrap">
+              <div class="exc-bar-track">
+                <div class="exc-bar-fill" style="width:{{ bar_pct }}%; background:{{ bar_color }};"></div>
+              </div>
+              <span class="exc-pct">{{ "%.1f"|format(pct) }}%</span>
             </div>
-            <span class="exc-pct">{{ "%.1f"|format(pct) }}%</span>
-          </div>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endif %}
 
@@ -199,11 +300,20 @@
   </div>
 </div>
 
-{# ── Failed state ── #}
+{# ── Failed / cancelled state ── #}
 {% elif run.status == "failed" %}
 <div class="card card-error">
   <div class="card-title">Run Failed</div>
   <p style="margin-top:8px; font-size:13.5px;">{{ run.error or "An unknown error occurred." }}</p>
+  <div class="card-actions">
+    <a href="/dashboard" class="btn btn-ghost">← Back to Dashboard</a>
+  </div>
+</div>
+
+{% elif run.status == "cancelled" %}
+<div class="card" style="border:1px solid var(--border);">
+  <div class="card-title">Run Stopped</div>
+  <p style="margin-top:8px; font-size:13.5px; color:var(--muted);">This run was stopped before completing.</p>
   <div class="card-actions">
     <a href="/dashboard" class="btn btn-ghost">← Back to Dashboard</a>
   </div>

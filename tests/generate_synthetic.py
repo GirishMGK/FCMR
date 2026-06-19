@@ -16,11 +16,10 @@ The generator intentionally seeds defects so the rule engine can be verified:
 
 from __future__ import annotations
 
-import hashlib
+import csv
 import random
 import string
 import sys
-import csv
 from pathlib import Path
 
 # Valid Aadhaar Verhoeff multiplication and permutation tables
@@ -144,13 +143,64 @@ _VALID_PINS = [
     ("141001", "punjab", "ludhiana"),
 ]
 
-_FIRST_NAMES = ["Rahul", "Priya", "Amit", "Sunita", "Ravi", "Meena", "Suresh", "Kavitha",
-                "Rajesh", "Anita", "Vijay", "Lakshmi", "Arun", "Deepa", "Sanjay", "Pooja",
-                "Manoj", "Rekha", "Ajay", "Smita", "Nikhil", "Divya", "Kiran", "Nisha",
-                "Mahesh", "Usha", "Dinesh", "Geeta", "Ramesh", "Savita"]
-_LAST_NAMES = ["Sharma", "Patel", "Singh", "Kumar", "Gupta", "Mehta", "Rao", "Nair",
-               "Iyer", "Reddy", "Joshi", "Pillai", "Chandra", "Verma", "Shah", "Das",
-               "Yadav", "Mishra", "Tiwari", "Shetty", "Naik", "Bhat", "Menon", "Jain"]
+_FIRST_NAMES = [
+    "Rahul",
+    "Priya",
+    "Amit",
+    "Sunita",
+    "Ravi",
+    "Meena",
+    "Suresh",
+    "Kavitha",
+    "Rajesh",
+    "Anita",
+    "Vijay",
+    "Lakshmi",
+    "Arun",
+    "Deepa",
+    "Sanjay",
+    "Pooja",
+    "Manoj",
+    "Rekha",
+    "Ajay",
+    "Smita",
+    "Nikhil",
+    "Divya",
+    "Kiran",
+    "Nisha",
+    "Mahesh",
+    "Usha",
+    "Dinesh",
+    "Geeta",
+    "Ramesh",
+    "Savita",
+]
+_LAST_NAMES = [
+    "Sharma",
+    "Patel",
+    "Singh",
+    "Kumar",
+    "Gupta",
+    "Mehta",
+    "Rao",
+    "Nair",
+    "Iyer",
+    "Reddy",
+    "Joshi",
+    "Pillai",
+    "Chandra",
+    "Verma",
+    "Shah",
+    "Das",
+    "Yadav",
+    "Mishra",
+    "Tiwari",
+    "Shetty",
+    "Naik",
+    "Bhat",
+    "Menon",
+    "Jain",
+]
 
 
 def _name() -> str:
@@ -183,9 +233,24 @@ def generate(n: int, output_path: Path) -> None:
     shared_pan_cursor = 0
 
     fieldnames = [
-        "customer_id", "full_name", "dob", "gender", "mobile", "email",
-        "pan", "aadhaar", "voter_id", "passport", "driving_licence",
-        "address_line1", "city", "district", "state", "pincode", "bank_account", "ifsc",
+        "customer_id",
+        "full_name",
+        "dob",
+        "gender",
+        "mobile",
+        "email",
+        "pan",
+        "aadhaar",
+        "voter_id",
+        "passport",
+        "driving_licence",
+        "address_line1",
+        "city",
+        "district",
+        "state",
+        "pincode",
+        "bank_account",
+        "ifsc",
     ]
 
     with output_path.open("w", newline="", encoding="utf-8") as f:
@@ -205,9 +270,11 @@ def generate(n: int, output_path: Path) -> None:
                 "gender": rng.choice(["M", "F", "O"]),
                 "mobile": _mobile(),
                 "email": _email(name),
-                "pan": (shared_pans[shared_pan_cursor % shared_pan_count]
-                        if roll < 0.01
-                        else (_invalid_pan() if 0.01 <= roll < 0.03 else _valid_pan(name))),
+                "pan": (
+                    shared_pans[shared_pan_cursor % shared_pan_count]
+                    if roll < 0.01
+                    else (_invalid_pan() if 0.01 <= roll < 0.03 else _valid_pan(name))
+                ),
                 "aadhaar": _invalid_aadhaar() if 0.03 <= roll < 0.05 else _valid_aadhaar(),
                 "voter_id": _valid_voter_id(),
                 "passport": _valid_passport() if rng.random() < 0.5 else "",

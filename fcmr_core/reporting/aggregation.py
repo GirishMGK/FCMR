@@ -23,7 +23,7 @@ def aggregate_status_counts(wide_csv_path: Path) -> dict[str, int]:
         return {"OK": 0, "WARN": 0, "ERROR": 0}
 
     try:
-        df = pl.read_csv(wide_csv_path, columns=["overall_status"])
+        df = pl.read_csv(wide_csv_path, columns=["overall_status"], infer_schema_length=0)
         counts = df["overall_status"].value_counts(sort=True).to_dicts()
         result = {row["overall_status"]: row["counts"] for row in counts}
         # Ensure all statuses are present
@@ -36,12 +36,12 @@ def aggregate_status_counts(wide_csv_path: Path) -> dict[str, int]:
         return {"OK": 0, "WARN": 0, "ERROR": 0}
 
 
-def aggregate_exception_codes(wide_csv_path: Path, top_n: int = 10) -> dict[str, int]:
+def aggregate_exception_codes(wide_csv_path: Path, top_n: int | None = 10) -> dict[str, int]:
     """Count top N exception codes from exception_codes column (pipe-delimited).
 
     Args:
         wide_csv_path: Path to the wide exception CSV.
-        top_n: Number of top codes to return.
+        top_n: Number of top codes to return. None = all codes.
 
     Returns:
         {exception_code: count} sorted by frequency descending.
@@ -50,7 +50,7 @@ def aggregate_exception_codes(wide_csv_path: Path, top_n: int = 10) -> dict[str,
         return {}
 
     try:
-        df = pl.read_csv(wide_csv_path, columns=["exception_codes"])
+        df = pl.read_csv(wide_csv_path, columns=["exception_codes"], infer_schema_length=0)
         # Parse pipe-delimited codes
         all_codes = []
         for codes_str in df["exception_codes"]:
@@ -63,9 +63,10 @@ def aggregate_exception_codes(wide_csv_path: Path, top_n: int = 10) -> dict[str,
         for code in all_codes:
             code_counts[code] = code_counts.get(code, 0) + 1
 
-        # Return top N
+        # Return top N (or all if top_n is None)
         sorted_codes = sorted(code_counts.items(), key=lambda x: x[1], reverse=True)
-        return {code: count for code, count in sorted_codes[:top_n]}
+        limit = top_n if top_n is not None else len(sorted_codes)
+        return {code: count for code, count in sorted_codes[:limit]}
     except Exception:
         return {}
 

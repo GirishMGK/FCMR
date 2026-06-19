@@ -1,0 +1,69 @@
+name: Build and Release Desktop App
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Python dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Install Node dependencies
+        run: npm install
+
+      - name: Build Python backend (PyInstaller)
+        run: npm run build:backend
+
+      # Build the installer AND publish to sangir-releases in one step.
+      # RELEASE_TOKEN must be a PAT with contents:write on ihbsandeepreddy/sangir-releases.
+      # If the token is missing/expired, continue-on-error keeps the workflow green
+      # and the artifact below is still downloadable from the Actions run.
+      - name: Build and publish Electron installer
+        run: npm run dist -- --publish always
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+      # Always upload the installer as a workflow artifact so it's downloadable
+      # even if the sangir-releases publish step above fails.
+      - name: Upload installer as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SAND-Setup-${{ github.ref_name }}
+          path: |
+            dist/SAND-Setup-*.exe
+            dist/SAND-Setup-*.exe.blockmap
+            dist/latest.yml
+          if-no-files-found: error
+
+      # Verify that latest.yml was produced (it's required for auto-updates to work).
+      - name: Verify latest.yml was generated
+        shell: pwsh
+        run: |
+          if (Test-Path "dist/latest.yml") {
+            Write-Host "latest.yml OK:"
+            Get-Content "dist/latest.yml"
+          } else {
+            Write-Error "dist/latest.yml not found — auto-updates will not work for this release!"
+            exit 1
+          }

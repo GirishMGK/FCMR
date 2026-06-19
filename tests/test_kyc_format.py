@@ -4,15 +4,14 @@ import polars as pl
 import pytest
 
 from fcmr_core.rules.kyc_format import (
+    _verhoeff_valid,
     rule_aadhaar_format,
-    rule_dl_format,
     rule_dob_validity,
     rule_email_format,
     rule_mobile_format,
     rule_pan_format,
     rule_passport_format,
     rule_voter_id_format,
-    _verhoeff_valid,
 )
 
 
@@ -74,21 +73,30 @@ class TestPanFormat:
 class TestAadhaarFormat:
     def test_verhoeff_known_valid(self):
         # Build a valid Aadhaar using the same algorithm as the generator
+        import random
+
         from tests.generate_synthetic import _valid_aadhaar
-        import random; random.seed(1)
+
+        random.seed(1)
         valid = _valid_aadhaar()
         assert _verhoeff_valid(valid)
 
     def test_verhoeff_fails_on_flipped_digit(self):
+        import random
+
         from tests.generate_synthetic import _valid_aadhaar
-        import random; random.seed(2)
+
+        random.seed(2)
         valid = _valid_aadhaar()
         corrupted = valid[:-1] + str((int(valid[-1]) + 1) % 10)
         assert not _verhoeff_valid(corrupted)
 
     def test_valid_aadhaar_rule(self):
+        import random
+
         from tests.generate_synthetic import _valid_aadhaar
-        import random; random.seed(3)
+
+        random.seed(3)
         valid = _valid_aadhaar()
         df = rule_aadhaar_format(_df(aadhaar=valid))
         assert _status(df, "aadhaar_format") == "OK"
@@ -107,8 +115,11 @@ class TestAadhaarFormat:
         assert _code(df, "aadhaar_format") == "AADHAAR_INVALID_PREFIX"
 
     def test_checksum_fail(self):
+        import random
+
         from tests.generate_synthetic import _invalid_aadhaar
-        import random; random.seed(4)
+
+        random.seed(4)
         invalid = _invalid_aadhaar()
         df = rule_aadhaar_format(_df(aadhaar=invalid))
         assert _code(df, "aadhaar_format") == "AADHAAR_CHECKSUM_FAIL"

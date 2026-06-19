@@ -1,20 +1,19 @@
 """Excel workpaper builder for audit documentation.
 
-Generates a 4-sheet workpaper: Lead Sheet, Detailed Exceptions, TOC/TOD, Methodology.
+Generates a 4-sheet workpaper: Lead Sheet, Detailed Exceptions, TOC and TOD, Methodology.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import polars as pl
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from fcmr_core.reporting.aggregation import aggregate_exception_codes
-from fcmr_core.sampling.stratification import get_stratified_summary
 
 
 def _sanitize_filename(text: str) -> str:
@@ -50,7 +49,7 @@ def build_workpaper(
     engagement_name = _sanitize_filename(engagement.get("name", "Engagement"))
     period_from = (engagement.get("period_from") or "").split("T")[0]
     period_to = (engagement.get("period_to") or "").split("T")[0]
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     filename = f"{engagement_name}_{period_from}_{period_to}_{timestamp}.xlsx"
     workpaper_path = output_dir / filename
 
@@ -72,26 +71,50 @@ def build_workpaper(
     )
 
     # ── Sheet 1: Lead Sheet ──
-    _build_lead_sheet(ws, engagement, run, wide_csv_path, sample_records, header_fill, header_font, title_font, subheader_font, border)
+    _build_lead_sheet(
+        ws,
+        engagement,
+        run,
+        wide_csv_path,
+        sample_records,
+        header_fill,
+        header_font,
+        title_font,
+        subheader_font,
+        border,
+    )
 
     # ── Sheet 2: Detailed Exceptions ──
     ws2 = wb.create_sheet("Detailed Exceptions")
     _build_detailed_exceptions_sheet(ws2, wide_csv_path, header_fill, header_font, border)
 
-    # ── Sheet 3: TOC/TOD ──
-    ws3 = wb.create_sheet("TOC/TOD")
+    # ── Sheet 3: TOC and TOD ──
+    ws3 = wb.create_sheet("TOC and TOD")
     _build_toc_tod_sheet(ws3, sample_records, header_fill, header_font, border)
 
     # ── Sheet 4: Methodology ──
     ws4 = wb.create_sheet("Methodology")
-    _build_methodology_sheet(ws4, engagement, run, wide_csv_path, sample_records, title_font, subheader_font)
+    _build_methodology_sheet(
+        ws4, engagement, run, wide_csv_path, sample_records, title_font, subheader_font
+    )
 
     # Save
     wb.save(workpaper_path)
     return workpaper_path
 
 
-def _build_lead_sheet(ws, engagement, run, wide_csv_path, sample_records, header_fill, header_font, title_font, subheader_font, border):
+def _build_lead_sheet(
+    ws,
+    engagement,
+    run,
+    wide_csv_path,
+    sample_records,
+    header_fill,
+    header_font,
+    title_font,
+    subheader_font,
+    border,
+):
     """Build Lead Sheet."""
     row = 1
 
@@ -104,10 +127,12 @@ def _build_lead_sheet(ws, engagement, run, wide_csv_path, sample_records, header
     ws[f"A{row}"].font = subheader_font
     row += 1
 
-    ws[f"A{row}"] = f"Client: {engagement.get('client_name', 'N/A')} | Period: {engagement.get('period_from', '')} to {engagement.get('period_to', '')}"
+    ws[f"A{row}"] = (
+        f"Client: {engagement.get('client_name', 'N/A')} | Period: {engagement.get('period_from', '')} to {engagement.get('period_to', '')}"
+    )
     row += 1
 
-    ws[f"A{row}"] = f"Audit Date: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
+    ws[f"A{row}"] = f"Audit Date: {datetime.now(UTC).strftime('%Y-%m-%d')}"
     row += 2
 
     # Exception Summary
@@ -116,7 +141,7 @@ def _build_lead_sheet(ws, engagement, run, wide_csv_path, sample_records, header
     row += 1
 
     try:
-        df = pl.read_csv(wide_csv_path, columns=["overall_status"])
+        df = pl.read_csv(wide_csv_path, columns=["overall_status"], infer_schema_length=0)
         status_counts = df["overall_status"].value_counts().to_dicts()
         status_dict = {d["overall_status"]: d["count"] for d in status_counts}
 
@@ -144,7 +169,9 @@ def _build_lead_sheet(ws, engagement, run, wide_csv_path, sample_records, header
     row += 1
 
     # Headers
-    for col, header in enumerate(["Exception Code", "Frequency", "Source Document", "Compliance Point"], 1):
+    for col, header in enumerate(
+        ["Exception Code", "Frequency", "Source Document", "Compliance Point"], 1
+    ):
         cell = ws.cell(row=row, column=col, value=header)
         cell.fill = header_fill
         cell.font = header_font
@@ -181,8 +208,18 @@ def _build_lead_sheet(ws, engagement, run, wide_csv_path, sample_records, header
 def _build_detailed_exceptions_sheet(ws, wide_csv_path, header_fill, header_font, border):
     """Build Detailed Exceptions sheet."""
     try:
-        df = pl.read_csv(wide_csv_path)
-        cols_to_keep = [c for c in ["customer_id", "overall_status", "exception_count", "exception_codes", "exception_descriptions"] if c in df.columns]
+        df = pl.read_csv(wide_csv_path, infer_schema_length=0)
+        cols_to_keep = [
+            c
+            for c in [
+                "customer_id",
+                "overall_status",
+                "exception_count",
+                "exception_codes",
+                "exception_descriptions",
+            ]
+            if c in df.columns
+        ]
         df = df.select(cols_to_keep)
 
         # Headers
@@ -192,8 +229,8 @@ def _build_detailed_exceptions_sheet(ws, wide_csv_path, header_fill, header_font
             cell.font = header_font
 
         # Data rows
-        for row_idx, row_data in enumerate(df.iter_rows(values_only=True), 2):
-            for col_idx, value in enumerate(row_data, 1):
+        for row_idx, row in enumerate(df.rows(), 2):
+            for col_idx, value in enumerate(row, 1):
                 cell = ws.cell(row=row_idx, column=col_idx, value=value)
                 cell.border = border
 
@@ -201,13 +238,22 @@ def _build_detailed_exceptions_sheet(ws, wide_csv_path, header_fill, header_font
         for col_idx in range(1, len(cols_to_keep) + 1):
             ws.column_dimensions[get_column_letter(col_idx)].width = 20
     except Exception:
-        ws[f"A1"] = "Unable to load exception data"
+        ws["A1"] = "Unable to load exception data"
 
 
 def _build_toc_tod_sheet(ws, sample_records, header_fill, header_font, border):
     """Build Test of Controls / Test of Details sheet."""
     # Headers
-    headers = ["Sample#", "Row_Index", "Criticality", "Selection_Reason", "Tested_By", "Date", "Sign_Off", "Notes"]
+    headers = [
+        "Sample#",
+        "Row_Index",
+        "Criticality",
+        "Selection_Reason",
+        "Tested_By",
+        "Date",
+        "Sign_Off",
+        "Notes",
+    ]
     for col_idx, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col_idx, value=header)
         cell.fill = header_fill
@@ -226,7 +272,9 @@ def _build_toc_tod_sheet(ws, sample_records, header_fill, header_font, border):
         ws.column_dimensions[get_column_letter(col_idx)].width = width
 
 
-def _build_methodology_sheet(ws, engagement, run, wide_csv_path, sample_records, title_font, subheader_font):
+def _build_methodology_sheet(
+    ws, engagement, run, wide_csv_path, sample_records, title_font, subheader_font
+):
     """Build Sampling Methodology Note sheet."""
     row = 1
 
@@ -271,14 +319,16 @@ def _build_methodology_sheet(ws, engagement, run, wide_csv_path, sample_records,
     row += 1
 
     try:
-        df = pl.read_csv(wide_csv_path)
+        df = pl.read_csv(wide_csv_path, infer_schema_length=0)
         population = len(df)
         exception_count = sum(1 for val in df["overall_status"] if val != "OK")
         sample_size = len(sample_records)
 
         ws[f"A{row}"] = f"Population: {population:,} records"
         row += 1
-        ws[f"A{row}"] = f"Exceptions: {exception_count:,} records ({exception_count/population*100:.1f}%)"
+        ws[f"A{row}"] = (
+            f"Exceptions: {exception_count:,} records ({exception_count/population*100:.1f}%)"
+        )
         row += 1
         ws[f"A{row}"] = f"Sample Size: {sample_size} (from ICAI table, 95% confidence)"
         row += 1

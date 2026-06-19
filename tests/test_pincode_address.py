@@ -1,11 +1,9 @@
 """Unit tests for PIN code and address validation rules."""
 
 import polars as pl
-import pytest
 
 from fcmr_core.rules.pincode_address import (
     rule_address_completeness,
-    rule_district_pin_match,
     rule_pincode_exists,
     rule_state_pin_match,
 )
@@ -52,8 +50,9 @@ class TestStatePinMatch:
         assert _code(df, "state_pin_match") == "STATE_PIN_MISMATCH"
 
     def test_missing_state(self):
+        # Missing state is skipped here (address_completeness handles it); no double-flag.
         df = rule_state_pin_match(_df(pincode="110001", state=""))
-        assert _status(df, "state_pin_match") == "WARN"
+        assert _status(df, "state_pin_match") == "OK"
 
     def test_known_pin_karnataka(self):
         df = rule_state_pin_match(_df(pincode="560001", state="karnataka"))
@@ -66,22 +65,34 @@ class TestStatePinMatch:
 
 class TestAddressCompleteness:
     def test_all_fields_present(self):
-        df = rule_address_completeness(_df(
-            address_line1="123 Main St", city="Mumbai",
-            state="Maharashtra", pincode="400001",
-        ))
+        df = rule_address_completeness(
+            _df(
+                address_line1="123 Main St",
+                city="Mumbai",
+                state="Maharashtra",
+                pincode="400001",
+            )
+        )
         assert _status(df, "address_completeness") == "OK"
 
     def test_missing_pincode(self):
-        df = rule_address_completeness(_df(
-            address_line1="123 Main St", city="Mumbai",
-            state="Maharashtra", pincode="",
-        ))
+        df = rule_address_completeness(
+            _df(
+                address_line1="123 Main St",
+                city="Mumbai",
+                state="Maharashtra",
+                pincode="",
+            )
+        )
         assert _code(df, "address_completeness") == "ADDRESS_INCOMPLETE"
 
     def test_missing_multiple_fields(self):
-        df = rule_address_completeness(_df(
-            address_line1="", city="",
-            state="Maharashtra", pincode="400001",
-        ))
+        df = rule_address_completeness(
+            _df(
+                address_line1="",
+                city="",
+                state="Maharashtra",
+                pincode="400001",
+            )
+        )
         assert _code(df, "address_completeness") == "ADDRESS_INCOMPLETE"
