@@ -9,7 +9,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
-from app.api import auth, blob_upload, downloads, engagements, runs, uploads
+from app.api import auth, blob_upload, downloads, engagements, runs, system, uploads
 from app.api import settings as settings_api
 from fcmr_core.catalog import store
 from fcmr_core.catalog.store import init_catalog
@@ -92,6 +92,9 @@ app.include_router(downloads.router, prefix="", tags=["downloads"])
 
 # Settings routes — require login
 app.include_router(settings_api.router, prefix="", tags=["settings"])
+
+# System info & monitoring routes — require login
+app.include_router(system.router, prefix="/api", tags=["system"])
 
 # Blob upload routes (token endpoint is public; register endpoint requires login)
 app.include_router(blob_upload.router, prefix="", tags=["blob"])

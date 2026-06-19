@@ -54,6 +54,28 @@
         </div>
       </div>
 
+      {# Resource usage during run #}
+      <div id="resource-monitor" style="margin-bottom:14px; padding:10px; background:var(--bg-alt); border-radius:6px; display:none;">
+        <div style="font-size:11.5px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div>
+            <div style="color:var(--muted); margin-bottom:2px;">RAM Usage</div>
+            <div style="font-weight:600;" id="monitor-ram">—</div>
+          </div>
+          <div>
+            <div style="color:var(--muted); margin-bottom:2px;">CPU Usage</div>
+            <div style="font-weight:600;" id="monitor-cpu">—</div>
+          </div>
+          <div>
+            <div style="color:var(--muted); margin-bottom:2px;">Disk Spill</div>
+            <div style="font-weight:600;" id="monitor-spill">—</div>
+          </div>
+          <div>
+            <div style="color:var(--muted); margin-bottom:2px;">Available RAM</div>
+            <div style="font-weight:600;" id="monitor-avail">—</div>
+          </div>
+        </div>
+      </div>
+
       <div>
         <button id="stop-btn" onclick="stopRun()" class="btn btn-sm"
                 style="background:oklch(55% 0.18 25); color:#fff; border:none;">
@@ -78,14 +100,30 @@
     if (lblEl && label) lblEl.textContent = label;
   }
 
+  async function updateResourceMonitor() {
+    try {
+      const res = await fetch('/api/system/usage');
+      const data = await res.json();
+      document.getElementById('monitor-ram').textContent = Math.round(data.ram.percent) + '%';
+      document.getElementById('monitor-cpu').textContent = Math.round(data.cpu.percent) + '%';
+      document.getElementById('monitor-spill').textContent = (data.disk_spill_mb / 1024).toFixed(2) + ' GB';
+      document.getElementById('monitor-avail').textContent = data.ram.available_gb.toFixed(1) + ' GB';
+    } catch (e) {
+      console.error('Resource monitor fetch failed:', e);
+    }
+  }
+
   function poll() {
     fetch('/runs/' + RUN_ID + '/status')
       .then(function (r) { return r.json(); })
       .then(function (data) {
         updateProgress(data.progress_pct || 0, data.progress_step || '');
+        document.getElementById('resource-monitor').style.display = 'block';
+        updateResourceMonitor();
         if (data.status === 'running' || data.status === 'pending') {
           setTimeout(poll, 1200);
         } else {
+          document.getElementById('resource-monitor').style.display = 'none';
           window.location.reload();
         }
       })
