@@ -55,7 +55,9 @@ def stratify_by_exception_severity(wide_csv_path: Path) -> dict[str, list[int]]:
         return {"OK": [], "CRITICAL": [], "HIGH": [], "MEDIUM": [], "LOW": []}
 
     try:
-        df = pl.read_csv(wide_csv_path, columns=["exception_codes", "overall_status"])
+        df = pl.read_csv(
+            wide_csv_path, columns=["exception_codes", "overall_status"], infer_schema_length=0
+        )
     except Exception:
         return {"OK": [], "CRITICAL": [], "HIGH": [], "MEDIUM": [], "LOW": []}
 

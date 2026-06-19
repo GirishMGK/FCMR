@@ -62,7 +62,7 @@ def select_sample(
 
     # Read exception codes for each row
     try:
-        df = pl.read_csv(wide_csv_path, columns=["exception_codes"])
+        df = pl.read_csv(wide_csv_path, columns=["exception_codes"], infer_schema_length=0)
         exception_codes_list = df["exception_codes"].to_list()
     except Exception:
         exception_codes_list = [""] * population

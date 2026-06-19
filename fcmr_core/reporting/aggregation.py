@@ -23,7 +23,7 @@ def aggregate_status_counts(wide_csv_path: Path) -> dict[str, int]:
         return {"OK": 0, "WARN": 0, "ERROR": 0}
 
     try:
-        df = pl.read_csv(wide_csv_path, columns=["overall_status"])
+        df = pl.read_csv(wide_csv_path, columns=["overall_status"], infer_schema_length=0)
         counts = df["overall_status"].value_counts(sort=True).to_dicts()
         result = {row["overall_status"]: row["counts"] for row in counts}
         # Ensure all statuses are present
@@ -50,7 +50,7 @@ def aggregate_exception_codes(wide_csv_path: Path, top_n: int | None = 10) -> di
         return {}
 
     try:
-        df = pl.read_csv(wide_csv_path, columns=["exception_codes"])
+        df = pl.read_csv(wide_csv_path, columns=["exception_codes"], infer_schema_length=0)
         # Parse pipe-delimited codes
         all_codes = []
         for codes_str in df["exception_codes"]:

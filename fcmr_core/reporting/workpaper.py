@@ -141,7 +141,7 @@ def _build_lead_sheet(
     row += 1
 
     try:
-        df = pl.read_csv(wide_csv_path, columns=["overall_status"])
+        df = pl.read_csv(wide_csv_path, columns=["overall_status"], infer_schema_length=0)
         status_counts = df["overall_status"].value_counts().to_dicts()
         status_dict = {d["overall_status"]: d["count"] for d in status_counts}
 
@@ -208,7 +208,7 @@ def _build_lead_sheet(
 def _build_detailed_exceptions_sheet(ws, wide_csv_path, header_fill, header_font, border):
     """Build Detailed Exceptions sheet."""
     try:
-        df = pl.read_csv(wide_csv_path)
+        df = pl.read_csv(wide_csv_path, infer_schema_length=0)
         cols_to_keep = [
             c
             for c in [
@@ -319,7 +319,7 @@ def _build_methodology_sheet(
     row += 1
 
     try:
-        df = pl.read_csv(wide_csv_path)
+        df = pl.read_csv(wide_csv_path, infer_schema_length=0)
         population = len(df)
         exception_count = sum(1 for val in df["overall_status"] if val != "OK")
         sample_size = len(sample_records)
