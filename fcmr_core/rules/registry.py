@@ -96,6 +96,37 @@ def list_rules() -> list[RuleMeta]:
     return list(_REGISTRY)
 
 
+_NUMERIC_CANONICALS = {
+    "loan_amount", "outstanding_principal", "emi_amount", "age",
+    "sanctioned_amount", "disbursed_amount", "outstanding_balance",
+}
+
+
+def _coerce_str_columns(df: pl.DataFrame) -> pl.DataFrame:
+    """Cast any non-numeric, non-exception column to Utf8.
+
+    Polars scan_csv can infer Int64 for columns like bank_account or pincode
+    when all values are numeric. Rules call .strip() on Python values iterated
+    from those columns, which raises AttributeError on int. This coercion runs
+    once before the rule pipeline so every rule sees string values.
+    """
+    casts = []
+    for col in df.columns:
+        if col.startswith("_exc_"):
+            continue
+        if col in _NUMERIC_CANONICALS:
+            continue
+        if df[col].dtype in (
+            pl.Int8, pl.Int16, pl.Int32, pl.Int64,
+            pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64,
+            pl.Float32, pl.Float64,
+        ):
+            casts.append(pl.col(col).cast(pl.Utf8, strict=False))
+    if casts:
+        df = df.with_columns(casts)
+    return df
+
+
 def list_categories() -> list[dict]:
     """Return categories enriched with rule descriptions."""
     _ensure_rules_loaded()
@@ -115,10 +146,6 @@ def resolve_rule_ids(
     category_ids: list[str], rule_ids: list[str]
 ) -> list[str] | None:
     """Resolve selected categories and rules into a unified rule_ids list.
-
-    Args:
-        category_ids: Selected category IDs.
-        rule_ids: Explicitly selected rule IDs.
 
     Returns:
         Merged list of rule IDs, or None if neither is provided (= run all).
@@ -153,6 +180,7 @@ def run_pipeline(
         Annotated frame with _exc_* columns appended per rule.
     """
     _ensure_rules_loaded()
+    df = _coerce_str_columns(df)
     if rule_ids is None:
         selected_registry = _REGISTRY
     else:

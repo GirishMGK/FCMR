@@ -29,6 +29,13 @@ def _col_or_empty(df: pl.DataFrame, col: str) -> pl.Series:
     return pl.Series(col, [""] * len(df), dtype=pl.Utf8)
 
 
+def _ensure_row_id(df: pl.DataFrame) -> pl.DataFrame:
+    """Add a synthetic _row_num column if neither customer_id nor _row_num exists."""
+    if "customer_id" not in df.columns and "_row_num" not in df.columns:
+        df = df.with_columns(pl.Series("_row_num", [str(i) for i in range(len(df))]))
+    return df
+
+
 def _annotate(
     df: pl.DataFrame, rule_id: str, statuses: list[str], codes: list[str], descs: list[str]
 ) -> pl.DataFrame:
@@ -137,6 +144,7 @@ def _is_allowed_duplicate(cid: str, key: str, dupes: dict, ucid: str = "", lan: 
     "Shared PAN across different customer IDs (flagged unless same UCID + different LANs)",
 )
 def rule_pan_duplicate(df: pl.DataFrame) -> pl.DataFrame:
+    df = _ensure_row_id(df)
     work = df.with_columns(
         pl.col("pan").fill_null("").str.strip_chars().str.to_uppercase().alias("_pan_norm")
         if "pan" in df.columns
