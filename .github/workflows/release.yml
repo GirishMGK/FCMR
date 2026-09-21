@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch: {}
 
 jobs:
   build-windows:
@@ -49,7 +50,7 @@ jobs:
       - name: Upload installer as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SAND-Setup-${{ github.ref_name }}
+          name: SAND-Setup-${{ github.run_id }}
           path: |
             dist/SAND-Setup-*.exe
             dist/SAND-Setup-*.exe.blockmap
